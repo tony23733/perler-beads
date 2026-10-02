@@ -4,9 +4,18 @@
 import { deltaE2000, rgbToLab } from './color'
 import type { BeadColor, Palette, RGB } from '../types'
 
+export interface TwoNearest {
+  first: BeadColor
+  second: BeadColor
+  d1: number
+  d2: number
+}
+
 export interface ColorMatcher {
   /** 返回色卡中与给定 RGB 最接近的颜色 */
   nearest(rgb: RGB): BeadColor
+  /** 返回最近的两个颜色及各自色差（用于有序抖动） */
+  nearest2(rgb: RGB): TwoNearest
 }
 
 /**
@@ -18,28 +27,39 @@ export function createMatcher(palette: Palette): ColorMatcher {
   if (colors.length === 0) {
     throw new Error('色卡为空，无法匹配')
   }
-  const cache = new Map<number, BeadColor>()
+  const cache = new Map<number, TwoNearest>()
 
-  function nearest(rgb: RGB): BeadColor {
+  function nearest2(rgb: RGB): TwoNearest {
     const key = (rgb[0] << 16) | (rgb[1] << 8) | rgb[2]
     const hit = cache.get(key)
     if (hit) return hit
 
     const lab = rgbToLab(rgb)
-    let best = colors[0]
-    let bestDist = Infinity
+    let first = colors[0]
+    let second = colors[0]
+    let d1 = Infinity
+    let d2 = Infinity
     for (let i = 0; i < colors.length; i++) {
       const d = deltaE2000(lab, colors[i].lab)
-      if (d < bestDist) {
-        bestDist = d
-        best = colors[i]
+      if (d < d1) {
+        d2 = d1
+        second = first
+        d1 = d
+        first = colors[i]
+      } else if (d < d2) {
+        d2 = d
+        second = colors[i]
       }
     }
-    cache.set(key, best)
-    return best
+    const result: TwoNearest = { first, second, d1, d2 }
+    cache.set(key, result)
+    return result
   }
 
-  return { nearest }
+  return {
+    nearest: (rgb) => nearest2(rgb).first,
+    nearest2,
+  }
 }
 
 export interface MatchStats {

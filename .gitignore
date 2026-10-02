@@ -5,3 +5,7 @@ dist-ssr
 .DS_Store
 .vite
 coverage
+
+# 本地截图 / 临时图片，不提交
+Snipaste_*.png
+/screenshots/

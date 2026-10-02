@@ -1,7 +1,7 @@
 // 抖动：在最近色匹配时扩散量化误差，用更多色号换取更平滑的渐变/照片观感。
 //
 // - floyd-steinberg：误差扩散，把每像素的量化误差按 7/3/5/1 分给右、左下、下、右下。
-// - ordered：Bayer 4×4 有序抖动，按位置加一个阈值扰动再匹配。
+// - ordered：Bayer 4×4 有序抖动，在最近的两个色卡色之间按比例选择。
 //
 // 在 RGB 空间做抖动（快，且与色卡匹配配合良好）；null（空格）不参与也不接收误差。
 
@@ -16,9 +16,6 @@ const BAYER4 = [
   [3, 11, 1, 9],
   [15, 7, 13, 5],
 ]
-
-/** 有序抖动的基准扰动幅度（0-255） */
-const ORDERED_BASE_AMPLITUDE = 64
 
 const clamp255 = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v)
 
@@ -111,7 +108,6 @@ export function orderedDither(
   matcher: ColorMatcher,
   strength = 1,
 ): MatchResult {
-  const amplitude = ORDERED_BASE_AMPLITUDE * strength
   const cells: (string | null)[] = new Array(width * height)
   const counts = new Map<string, number>()
 
@@ -123,12 +119,18 @@ export function orderedDither(
         cells[i] = null
         continue
       }
-      // 阈值扰动：(-0.5, 0.5) 区间
-      const t = (BAYER4[y & 3][x & 3] + 0.5) / 16 - 0.5
-      const r = clamp255(p[0] + t * amplitude)
-      const g = clamp255(p[1] + t * amplitude)
-      const b = clamp255(p[2] + t * amplitude)
-      const color = matcher.nearest([Math.round(r), Math.round(g), Math.round(b)])
+
+      // 只在最近的两个色卡色之间抖动：
+      // ratio = d1 / (d1 + d2)，表示「选中第二近色」的比例。
+      // 像素正好命中色卡色时 d1 = 0 → ratio = 0，不会产生杂色点。
+      const { first, second, d1, d2 } = matcher.nearest2(p)
+      const total = d1 + d2
+      let ratio = Number.isFinite(total) && total > 0 ? d1 / total : 0
+      ratio = Math.min(1, ratio * strength)
+
+      // Bayer 阈值 ∈ (0, 1)
+      const threshold = (BAYER4[y & 3][x & 3] + 0.5) / 16
+      const color = threshold < ratio ? second : first
       cells[i] = color.id
       counts.set(color.id, (counts.get(color.id) ?? 0) + 1)
     }

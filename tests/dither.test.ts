@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { floydSteinberg, matchPixelsDither, orderedDither } from '../src/core/dither'
 import { createMatcher } from '../src/core/matcher'
 import { rgbToLab } from '../src/core/color'
+import { MARD_221 } from '../src/data/palettes'
 import type { BeadColor, Palette, RGB } from '../src/types'
 
 const RAW: Array<{ id: string; hex: string; rgb: RGB }> = [
@@ -81,10 +82,31 @@ describe('orderedDither', () => {
     expect(k / 256).toBeLessThan(0.8)
   })
 
-  it('强度为 0 时无抖动，增大强度后出现双色', () => {
-    const noStrength = orderedDither(solidGrey(8, 128), 8, 8, matcher, 0)
-    expect(new Set(noStrength.cells).size).toBe(1)
-    const strong = orderedDither(solidGrey(8, 128), 8, 8, matcher, 3)
-    expect(new Set(strong.cells).size).toBe(2)
+  it('强度为 0 时不抖动，强度 1 时出现双色', () => {
+    const none = orderedDither(solidGrey(8, 128), 8, 8, matcher, 0)
+    expect(new Set(none.cells).size).toBe(1)
+    const normal = orderedDither(solidGrey(8, 128), 8, 8, matcher, 1)
+    expect(new Set(normal.cells).size).toBe(2)
+  })
+})
+
+describe('平整色块不产生杂色（回归）', () => {
+  const mardMatcher = createMatcher(MARD_221)
+
+  it('纯色区域正好命中色卡时，有序抖动不产生杂色点', () => {
+    const target = MARD_221.colors[0]
+    const px = Array.from({ length: 64 }, () => [...target.rgb] as RGB)
+    const { stats } = orderedDither(px, 8, 8, mardMatcher, 1)
+    expect(stats).toHaveLength(1)
+    expect(stats[0].id).toBe(target.id)
+    expect(stats[0].count).toBe(64)
+  })
+
+  it('略微偏灰的近似白区域，主色仍占绝大多数（不会满屏点）', () => {
+    const target = MARD_221.colors[0]
+    const near = [target.rgb[0] - 3, target.rgb[1] - 3, target.rgb[2] - 3] as RGB
+    const px = Array.from({ length: 256 }, () => [...near] as RGB)
+    const { stats } = orderedDither(px, 16, 16, mardMatcher, 1)
+    expect(stats[0].count).toBeGreaterThan(256 * 0.8)
   })
 })
