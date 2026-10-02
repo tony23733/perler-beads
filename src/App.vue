@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 import ColorStats from './components/ColorStats.vue'
+import GridPreview from './components/GridPreview.vue'
+import GridSettings from './components/GridSettings.vue'
 import ImageUploader from './components/ImageUploader.vue'
 import PaletteSelect from './components/PaletteSelect.vue'
 import PixelPreview from './components/PixelPreview.vue'
 import SizeSettings from './components/SizeSettings.vue'
+import { DEFAULT_GRID_OPTIONS } from './core/grid'
+import type { GridRenderOptions } from './core/grid'
 import { loadImageData } from './core/image'
 import { pixelate, setSourceImage } from './core/pixelateClient'
 import type { BackgroundMode } from './core/pixelate'
@@ -31,6 +35,9 @@ const background = ref<BackgroundMode>('keep')
 const result = shallowRef<PixelateResponse | null>(null)
 const busy = ref(false)
 const error = ref<string | null>(null)
+
+const viewMode = ref<'pixel' | 'grid'>('pixel')
+const gridOptions = ref<GridRenderOptions>({ ...DEFAULT_GRID_OPTIONS })
 
 const palette = computed(() => getPalette(paletteId.value))
 const hasSource = computed(() => sourceUrl.value !== null)
@@ -186,8 +193,25 @@ onUnmounted(() => {
         <!-- 右：预览与统计 -->
         <section class="space-y-5">
           <div>
-            <div class="mb-2 flex items-baseline justify-between">
-              <h2 class="text-sm font-semibold text-slate-700">像素预览</h2>
+            <div class="mb-2 flex items-center justify-between">
+              <div class="flex gap-1 rounded-lg bg-slate-200 p-0.5">
+                <button
+                  type="button"
+                  class="rounded-md px-3 py-1 text-xs font-medium transition"
+                  :class="viewMode === 'pixel' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'"
+                  @click="viewMode = 'pixel'"
+                >
+                  像素预览
+                </button>
+                <button
+                  type="button"
+                  class="rounded-md px-3 py-1 text-xs font-medium transition"
+                  :class="viewMode === 'grid' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'"
+                  @click="viewMode = 'grid'"
+                >
+                  网格图纸
+                </button>
+              </div>
               <span v-if="busy" class="text-xs text-slate-400">计算中…</span>
             </div>
 
@@ -198,13 +222,29 @@ onUnmounted(() => {
               选择一张图片开始
             </div>
 
-            <PixelPreview
-              v-else-if="result"
-              :cells="result.cells"
-              :width="result.width"
-              :height="result.height"
-              :palette="palette"
-            />
+            <template v-else-if="result">
+              <GridSettings
+                v-if="viewMode === 'grid'"
+                v-model="gridOptions"
+                class="mb-3 rounded-xl border border-slate-200 bg-white p-3"
+              />
+
+              <PixelPreview
+                v-if="viewMode === 'pixel'"
+                :cells="result.cells"
+                :width="result.width"
+                :height="result.height"
+                :palette="palette"
+              />
+              <GridPreview
+                v-else
+                :cells="result.cells"
+                :width="result.width"
+                :height="result.height"
+                :palette="palette"
+                :options="gridOptions"
+              />
+            </template>
           </div>
 
           <ColorStats v-if="result" :stats="result.stats" :palette="palette" />
