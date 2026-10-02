@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import type { Palette } from '../types'
 
 const props = defineProps<{
@@ -34,10 +34,11 @@ function render() {
   }
 }
 
+onMounted(render)
 watch(
   () => [props.cells, props.width, props.height, props.palette] as const,
   render,
-  { immediate: true },
+  { flush: 'post' },
 )
 </script>
 

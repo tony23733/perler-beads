@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { DEFAULT_GRID_OPTIONS, measureGrid, renderGrid } from '../core/grid'
 import type { Grid2DContext, GridRenderOptions } from '../core/grid'
 import type { Palette } from '../types'
@@ -33,10 +33,11 @@ function render() {
   )
 }
 
+onMounted(render)
 watch(
   () => [props.cells, props.width, props.height, props.palette, props.options] as const,
   render,
-  { immediate: true, deep: true },
+  { deep: true, flush: 'post' },
 )
 </script>
 
