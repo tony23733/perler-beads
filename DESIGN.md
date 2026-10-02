@@ -184,51 +184,55 @@ interface BeadColor {
 
 ---
 
-## 6. 目录结构（执行时参考）
+## 6. 目录结构
 
 ```
 perler_beads/
 ├─ DESIGN.md                    # 本文档
 ├─ index.html
-├─ package.json
+├─ package.json                 # scripts: dev/build/preview/test/typecheck/gen:palette
 ├─ vite.config.ts
+├─ tsconfig.json
+├─ .gitignore                   # 含 Snipaste_*.png（本地截图不提交）
 ├─ scripts/
-│  └─ gen-palette.mjs           # reference JSON → src/data/palettes/*.ts
-├─ reference/                   # 只读的外部参考数据（不参与打包）
-│  └─ pindou-color-data/        # 来源: HansBug/pindou-color-data (MIT)
-│     ├─ LICENSE
-│     ├─ manifest.json
-│     ├─ mard-221-github/
-│     │  ├─ colors.json
-│     │  └─ README.md
-│     └─ mard-291-github/
-│        ├─ colors.json
-│        └─ README.md
-├─ public/
-│  └─ icons/                    # 图标（PWA 图标推迟到第二阶段）
+│  └─ gen-palette.mjs           # reference JSON → src/data/palettes/mard221.ts / mard291.ts
+├─ reference/                   # 只读外部参考数据（不参与打包）
+│  └─ pindou-color-data/        # HansBug/pindou-color-data (MIT)
+│     ├─ LICENSE / manifest.json
+│     ├─ mard-221-github/{colors.json,README.md}
+│     └─ mard-291-github/{colors.json,README.md}
 ├─ src/
 │  ├─ main.ts
-│  ├─ App.vue
+│  ├─ App.vue                   # 主界面：状态编排 + 布局
+│  ├─ style.css                 # Tailwind 入口
+│  ├─ types.ts                  # 全局类型（BeadColor/Palette/BeadGrid/ProjectSettings…）
+│  ├─ vite-env.d.ts
 │  ├─ components/
-│  │  ├─ ImageUploader.vue
-│  │  ├─ SizeSettings.vue
-│  │  ├─ PaletteSettings.vue
-│  │  ├─ PreviewCanvas.vue
-│  │  └─ BeadGrid.vue
-│  ├─ core/
-│  │  ├─ color.ts               # RGB/HEX/LAB 转换、CIEDE2000
-│  │  ├─ matcher.ts             # 最近色匹配、颜色数限制
-│  │  ├─ dither.ts              # 抖动算法（第二阶段）
-│  │  ├─ pixelate.ts            # 图像缩放/取样
-│  │  └─ exporter.ts            # PNG/SVG 导出
+│  │  ├─ ImageUploader.vue      # 上传/拖拽
+│  │  ├─ SizeSettings.vue       # 网格尺寸 + 锁比例 + 预设
+│  │  ├─ PaletteSelect.vue      # 色卡选择
+│  │  ├─ PixelPreview.vue       # 像素预览
+│  │  ├─ GridPreview.vue        # 网格图纸预览
+│  │  ├─ GridSettings.vue       # 网格显示设置
+│  │  ├─ ColorStats.vue         # 用色清单
+│  │  └─ ExportPanel.vue        # PNG/CSV 导出
+│  ├─ core/                     # 纯逻辑，可在 Node 下单测
+│  │  ├─ color.ts               # sRGB↔Lab、CIEDE2000
+│  │  ├─ pixelate.ts            # 降采样取样（保留/透明背景）
+│  │  ├─ matcher.ts             # 最近色匹配 nearest / nearest2 + 统计
+│  │  ├─ quantize.ts            # 限制颜色数量（palette-constrained k-means）
+│  │  ├─ dither.ts              # Floyd–Steinberg / Bayer 有序抖动
+│  │  ├─ grid.ts                # 网格图纸渲染（可测的 2D 上下文接口）
+│  │  ├─ exporter.ts            # PNG（含用色清单）/ CSV 导出
+│  │  ├─ image.ts               # 文件 → ImageData
+│  │  └─ pixelateClient.ts      # Worker 客户端（共享 worker + id 对应并发）
 │  ├─ workers/
-│  │  └─ pixelate.worker.ts
-│  ├─ data/
-│  │  └─ palettes/
-│  │     ├─ mard.ts             # 由 gen-palette.mjs 生成
-│  │     └─ index.ts
-│  └─ types.ts
-└─ tests/
+│  │  └─ pixelate.worker.ts     # 降采样 + 匹配 + 限色 + 抖动（源图只传一次）
+│  └─ data/palettes/
+│     ├─ mard221.ts             # 生成：221 色
+│     ├─ mard291.ts             # 生成：291 色
+│     └─ index.ts               # 运行时封装（预计算 Lab、默认色卡）
+└─ tests/                       # 10 个文件 / 85 项（vitest）
 ```
 
 ---
@@ -295,3 +299,35 @@ interface ProjectSettings {
 - 导出图纸时注意超长边图片的分块渲染，防止 Canvas 超过浏览器尺寸上限。
 - 色卡数据是屏幕参考值，务必在界面提示来源与“以实物色卡为准”。
 - 保留 `reference/pindou-color-data/LICENSE` 并在关于页致谢。
+
+---
+
+## 10. 交接与继续开发（新会话先读这节）
+
+### 10.1 运行 / 验证
+
+```bash
+npm install              # 首次
+npm run dev              # 开发，http://localhost:5173
+npm run dev -- --host    # 手机同局域网访问
+npm test                 # 85 项单元测试
+npm run typecheck        # vue-tsc 类型检查
+npm run build            # 生产构建（含类型检查）
+npm run gen:palette      # 由 reference/ 重新生成色卡（一般不用跑）
+```
+
+### 10.2 关键约定 / 踩过的坑（务必先读）
+
+- **TypeScript 锁 5.9**：TS 7（Go 重写版）与 `vue-tsc` 不兼容，**不要升级**。
+- **预览组件首绘**：用 `onMounted(render)` + `watch(..., { flush: 'post' })`；**不要**用 `watch({ immediate: true })`（会在挂载前执行，`canvas` 仍为 null，导致首次空白）。
+- **Worker 只接收一次源图**：`setSourceImage` 会 transfer 掉 `imageData.data.buffer`；之后改尺寸/色卡/抖动只调用 `pixelate`。
+- **CIEDE2000 大色差特性**：在缺少灰阶的色卡上，中灰可能匹配到同亮度饱和色（与参考库 `delta-e` 逐位一致，非 bug）；真实 MARD 含完整灰阶无此问题。`tests/deltaE.reference.test.ts` 持续校验。
+- **有序抖动**用「最近两色按比例」策略（`ratio = d1/(d1+d2)`），保证纯色区域不产生杂色；**不要**退回「固定幅度阈值扰动」写法。
+- **限色**用 palette-constrained k-means（`quantize.ts`），聚类用 Lab 欧氏距离（快），最终匹配用 CIEDE2000（准）。
+- 色卡是**屏幕参考值**，界面/文档需保留「以实物色卡为准」提示。
+- `reference/` 为只读外部数据，不要改；改色卡请改 `scripts/gen-palette.mjs` 后重生成。
+- 本地截图 `Snipaste_*.png` 已被 `.gitignore` 忽略；不要 `git add -f` 强加。
+
+### 10.3 下一步
+
+从 **背景处理** 开始（见 3.2）：在现有「保留 / 透明」基础上增加「按颜色去除」——点选背景色 + 容差（或自动取四角色），去除的颜色不参与配色。涉及 `core/pixelate.ts`、worker 请求参数与界面。
