@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 import ColorStats from './components/ColorStats.vue'
+import ExportPanel from './components/ExportPanel.vue'
 import GridPreview from './components/GridPreview.vue'
 import GridSettings from './components/GridSettings.vue'
 import ImageUploader from './components/ImageUploader.vue'
@@ -248,6 +249,16 @@ onUnmounted(() => {
           </div>
 
           <ColorStats v-if="result" :stats="result.stats" :palette="palette" />
+
+          <ExportPanel
+            v-if="result"
+            :cells="result.cells"
+            :width="result.width"
+            :height="result.height"
+            :palette="palette"
+            :stats="result.stats"
+            :grid-options="gridOptions"
+          />
 
           <footer class="text-xs text-slate-400">
             色卡数据来源：HansBug/pindou-color-data（MIT）。色值为屏幕参考值，请以实物色卡为准。
