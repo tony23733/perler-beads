@@ -5,10 +5,11 @@
 
 import { downsample } from '../core/pixelate'
 import type { BackgroundMode } from '../core/pixelate'
-import { createMatcher, matchPixels } from '../core/matcher'
+import { createMatcher } from '../core/matcher'
 import type { MatchStats } from '../core/matcher'
+import { matchPixelsDither } from '../core/dither'
 import { selectPaletteColors } from '../core/quantize'
-import type { Palette } from '../types'
+import type { DitherMode, Palette } from '../types'
 
 export interface SetImageRequest {
   type: 'setImage'
@@ -27,6 +28,10 @@ export interface PixelateRequest {
   background: BackgroundMode
   /** 限制使用的颜色数量；0 / 未设为不限制 */
   maxColors?: number
+  /** 抖动模式 */
+  dither?: DitherMode
+  /** 有序抖动强度（默认 1） */
+  ditherStrength?: number
   palette: Palette
 }
 
@@ -84,7 +89,15 @@ ctx.onmessage = (e: MessageEvent<WorkerRequest>) => {
       req.maxColors && req.maxColors > 0 && req.maxColors < req.palette.colors.length
         ? selectPaletteColors(pixels, req.palette, req.maxColors)
         : req.palette
-    const { cells, stats } = matchPixels(pixels, createMatcher(activePalette))
+    const matcher = createMatcher(activePalette)
+    const { cells, stats } = matchPixelsDither(
+      pixels,
+      width,
+      height,
+      matcher,
+      req.dither ?? 'none',
+      req.ditherStrength ?? 1,
+    )
     ctx.postMessage({
       type: 'result',
       id: req.id,

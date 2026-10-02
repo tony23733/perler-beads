@@ -1,7 +1,7 @@
 // 主线程侧的 Worker 客户端：共享一个 Worker，用消息 id 对应并发请求。
 
 import type { BackgroundMode } from './pixelate'
-import type { Palette } from '../types'
+import type { DitherMode, Palette } from '../types'
 import type {
   PixelateResponse,
   WorkerRequest,
@@ -14,6 +14,10 @@ export interface PixelateOptions {
   background: BackgroundMode
   /** 限制使用的颜色数量；0 / 未设为不限制 */
   maxColors?: number
+  /** 抖动模式 */
+  dither?: DitherMode
+  /** 有序抖动强度 */
+  ditherStrength?: number
   palette: Palette
 }
 

@@ -13,6 +13,7 @@ import type { GridRenderOptions } from './core/grid'
 import { loadImageData } from './core/image'
 import { pixelate, setSourceImage } from './core/pixelateClient'
 import type { BackgroundMode } from './core/pixelate'
+import type { DitherMode } from './types'
 import { DEFAULT_PALETTE_ID, getPalette, PALETTES } from './data/palettes'
 import type { PixelateResponse } from './workers/pixelate.worker'
 
@@ -33,6 +34,8 @@ const aspect = ref(1)
 const paletteId = ref<string>(DEFAULT_PALETTE_ID)
 const background = ref<BackgroundMode>('keep')
 const maxColors = ref(0)
+const dither = ref<DitherMode>('none')
+const ditherStrength = ref(1)
 
 const COLOR_LIMITS = [8, 12, 16, 20, 24, 32]
 
@@ -62,6 +65,8 @@ async function run() {
       targetHeight: targetHeight.value,
       background: background.value,
       maxColors: maxColors.value || undefined,
+      dither: dither.value,
+      ditherStrength: ditherStrength.value,
       palette: palette.value,
     })
     if (token !== runToken) return
@@ -117,7 +122,7 @@ function onHeight(value: number) {
   if (locked.value && aspect.value > 0) targetWidth.value = clampSide(value * aspect.value)
 }
 
-watch([targetWidth, targetHeight, paletteId, background, maxColors], scheduleRun)
+watch([targetWidth, targetHeight, paletteId, background, maxColors, dither, ditherStrength], scheduleRun)
 
 onUnmounted(() => {
   clearTimeout(timer)
@@ -178,6 +183,32 @@ onUnmounted(() => {
                   <option :value="0">不限制（用多少算多少）</option>
                   <option v-for="n in COLOR_LIMITS" :key="n" :value="n">{{ n }} 色以内</option>
                 </select>
+              </label>
+              <label class="block">
+                <span class="mb-1 block text-xs text-slate-500">抖动</span>
+                <select
+                  v-model="dither"
+                  class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none"
+                >
+                  <option value="none">无</option>
+                  <option value="floyd-steinberg">误差扩散（Floyd–Steinberg）</option>
+                  <option value="ordered">有序抖动（Bayer）</option>
+                </select>
+              </label>
+              <label v-if="dither === 'ordered'" class="block">
+                <span class="mb-1 flex items-center justify-between text-xs text-slate-500">
+                  <span>抖动强度</span>
+                  <span>{{ ditherStrength.toFixed(1) }}</span>
+                </span>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="2"
+                  step="0.1"
+                  :value="ditherStrength"
+                  class="w-full accent-indigo-500"
+                  @input="ditherStrength = Number(($event.target as HTMLInputElement).value)"
+                />
               </label>
               <div class="flex gap-2">
                 <button
