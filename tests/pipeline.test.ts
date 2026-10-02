@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { downsample } from '../src/core/pixelate'
 import type { RgbaImage } from '../src/core/pixelate'
 import { createMatcher, matchPixels } from '../src/core/matcher'
+import { selectPaletteColors } from '../src/core/quantize'
 import { MARD_221, MARD_291 } from '../src/data/palettes'
 import type { RGB } from '../src/types'
 
@@ -75,5 +76,29 @@ describe('pipeline（真实 MARD 色卡）', () => {
     expect(cells).toHaveLength(4)
     const ids291 = new Set(MARD_291.colors.map((c) => c.id))
     for (const id of cells) expect(ids291.has(id as string)).toBe(true)
+  })
+
+  it('限制颜色数量后，实际用色数不超过上限', () => {
+    const w = 16
+    const h = 16
+    const data = new Uint8ClampedArray(w * h * 4)
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4
+        data[i] = x * 16
+        data[i + 1] = y * 16
+        data[i + 2] = 128
+        data[i + 3] = 255
+      }
+    }
+    const { pixels } = downsample({ data, width: w, height: h }, {
+      targetWidth: 16,
+      targetHeight: 16,
+      background: 'keep',
+    })
+    const limited = selectPaletteColors(pixels, MARD_221, 8)
+    const { stats } = matchPixels(pixels, createMatcher(limited))
+    expect(stats.length).toBeGreaterThan(0)
+    expect(stats.length).toBeLessThanOrEqual(8)
   })
 })

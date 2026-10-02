@@ -7,6 +7,7 @@ import { downsample } from '../core/pixelate'
 import type { BackgroundMode } from '../core/pixelate'
 import { createMatcher, matchPixels } from '../core/matcher'
 import type { MatchStats } from '../core/matcher'
+import { selectPaletteColors } from '../core/quantize'
 import type { Palette } from '../types'
 
 export interface SetImageRequest {
@@ -24,6 +25,8 @@ export interface PixelateRequest {
   targetWidth: number
   targetHeight: number
   background: BackgroundMode
+  /** 限制使用的颜色数量；0 / 未设为不限制 */
+  maxColors?: number
   palette: Palette
 }
 
@@ -77,7 +80,11 @@ ctx.onmessage = (e: MessageEvent<WorkerRequest>) => {
       targetHeight: req.targetHeight,
       background: req.background,
     })
-    const { cells, stats } = matchPixels(pixels, createMatcher(req.palette))
+    const activePalette =
+      req.maxColors && req.maxColors > 0 && req.maxColors < req.palette.colors.length
+        ? selectPaletteColors(pixels, req.palette, req.maxColors)
+        : req.palette
+    const { cells, stats } = matchPixels(pixels, createMatcher(activePalette))
     ctx.postMessage({
       type: 'result',
       id: req.id,

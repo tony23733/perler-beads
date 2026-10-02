@@ -12,6 +12,8 @@ export interface PixelateOptions {
   targetWidth: number
   targetHeight: number
   background: BackgroundMode
+  /** 限制使用的颜色数量；0 / 未设为不限制 */
+  maxColors?: number
   palette: Palette
 }
 

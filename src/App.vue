@@ -32,6 +32,9 @@ const aspect = ref(1)
 
 const paletteId = ref<string>(DEFAULT_PALETTE_ID)
 const background = ref<BackgroundMode>('keep')
+const maxColors = ref(0)
+
+const COLOR_LIMITS = [8, 12, 16, 20, 24, 32]
 
 const result = shallowRef<PixelateResponse | null>(null)
 const busy = ref(false)
@@ -58,6 +61,7 @@ async function run() {
       targetWidth: targetWidth.value,
       targetHeight: targetHeight.value,
       background: background.value,
+      maxColors: maxColors.value || undefined,
       palette: palette.value,
     })
     if (token !== runToken) return
@@ -113,7 +117,7 @@ function onHeight(value: number) {
   if (locked.value && aspect.value > 0) targetWidth.value = clampSide(value * aspect.value)
 }
 
-watch([targetWidth, targetHeight, paletteId, background], scheduleRun)
+watch([targetWidth, targetHeight, paletteId, background, maxColors], scheduleRun)
 
 onUnmounted(() => {
   clearTimeout(timer)
@@ -165,6 +169,16 @@ onUnmounted(() => {
             <h2 class="mb-2 text-sm font-semibold text-slate-700">3. 色卡与背景</h2>
             <div class="space-y-3">
               <PaletteSelect v-model="paletteId" :palettes="paletteList" />
+              <label class="block">
+                <span class="mb-1 block text-xs text-slate-500">颜色数量</span>
+                <select
+                  v-model.number="maxColors"
+                  class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none"
+                >
+                  <option :value="0">不限制（用多少算多少）</option>
+                  <option v-for="n in COLOR_LIMITS" :key="n" :value="n">{{ n }} 色以内</option>
+                </select>
+              </label>
               <div class="flex gap-2">
                 <button
                   type="button"
