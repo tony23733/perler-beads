@@ -91,7 +91,8 @@ npm run preview    # 本地预览打包结果
 - ✅ **分页 A4 PDF 导出**：把整张网格按每格 N mm 切页（4/5/6/8mm），自动或手动选择纵向/横向（默认选页数最少的方向）；每页带标题、全局行列范围、页码、四角拼接定位角标与页脚；可选附带用色清单页。分片渲染复用 `renderGrid` 的**视口（viewport）**能力，行列坐标按全局编号。PDF 文案用 ASCII（jsPDF 内置字体不含中文）。
 
 **待做（建议顺序）**
-- ✅ **工程保存 / 加载**：把全部设置 + 源图保存到 IndexedDB（源图以 Blob 存，无需 base64）。可命名保存（同名覆盖）、列表加载、删除。设置带 `PROJECT_VERSION` 与 `normalizeSettings()` 容错，向后兼容。纯本地，无后端。
+- ✅ **工程保存 / 加载**：把全部设置 + 源图保存到 IndexedDB（源图以 Blob 存，无需 base64）。可命名保存（同名覆盖）、列表加载、删除；另有**导出/导入工程文件**（`.perler.json`，源图 base64 内嵌），可存到任意文件夹。设置带 `PROJECT_VERSION` 与 `normalizeSettings()` 容错，向后兼容。纯本地，无后端。
+  - 注：IndexedDB 是**浏览器内部数据库**（在浏览器配置目录里，不是用户可浏览的普通文件），网页无法打开系统文件管理器；需要“文件”就用导出/导入。
 
 **待做（建议顺序）**
 1. **手工编辑像素（点/拖改色、吸管）+ 撤销/重做**：撤销/重做需要先有手工编辑才有意义，建议一起做。← **下一步从这里开始**
@@ -242,7 +243,7 @@ perler_beads/
 │     ├─ mard221.ts             # 生成：221 色
 │     ├─ mard291.ts             # 生成：291 色
 │     └─ index.ts               # 运行时封装（预计算 Lab、默认色卡）
-└─ tests/                       # 14 个文件 / 109 项（vitest）
+└─ tests/                       # 14 个文件 / 111 项（vitest）
 ```
 
 ---
@@ -293,7 +294,7 @@ interface ProjectSettings {
    - ~~网格坐标标注~~ ✅（随网格图纸完成）
    - ~~背景处理~~ ✅（保留 / 透明 / 按颜色去除；源像素级去背景 + 预览拾色 + 自动取四角 + 容差 + 边缘阈值）
    - ~~分页 A4 PDF~~ ✅（`core/pdf.ts` + `ExportPanel`；每格 mm 连续可调，自动纵向/横向，页码 + 全局行列范围 + 四角拼接角标，可选清单页；jsPDF 动态 import 代码分包）
-   - ~~保存/加载工程~~ ✅（`core/project.ts` + `core/projectStore.ts` + `ProjectPanel`；IndexedDB 存源图 Blob，设置版本化 + 容错，同名覆盖）
+   - ~~保存/加载工程~~ ✅（`core/project.ts` + `core/projectStore.ts` + `ProjectPanel`；IndexedDB 存源图 Blob，设置版本化 + 容错，同名覆盖；支持导出/导入 `.perler.json` 工程文件）
    - **撤销/重做** ← 下一步
    - 批量处理 —— ⏸️ **暂缓（以后再说）**
 10. （第二阶段）接入 PWA + 静态托管；需要 HTTPS 时才部署。
@@ -320,7 +321,7 @@ interface ProjectSettings {
 npm install              # 首次
 npm run dev              # 开发，http://localhost:5173
 npm run dev -- --host    # 手机同局域网访问
-npm test                 # 109 项单元测试
+npm test                 # 111 项单元测试
 npm run typecheck        # vue-tsc 类型检查
 npm run build            # 生产构建（含类型检查）
 npm run gen:palette      # 由 reference/ 重新生成色卡（一般不用跑）
@@ -340,7 +341,7 @@ npm run gen:palette      # 由 reference/ 重新生成色卡（一般不用跑�
 - **实时控件与合并策略**：容差 / 边缘阈值 / 抖动强度默认走 `requestRun()` 立即触发（拖动实时刷新），可通过预览区右上角的「实时预览」开关关闭，关闭后改走 120ms 防抖。尺寸 / 色卡 / 模式等始终用 `scheduleRun()`。`run()` 内部用 `running`/`queued` 保证同一时刻只跑一个任务，结束后再用**最新**参数补跑一次，因此拖动滑块不会堆积请求（`busy` 会在队列排空后才消失）。不要改回单纯的 `watch` 防抖，否则又会变成「停下来才更新」。
 - **PDF 中文问题**：jsPDF 内置 Helvetica 不含中文字形，PDF 内的标题/页码/表头一律用 ASCII（如 `Page 1/4`、`Cols 1-30`），不要写中文，否则乱码或报错。
 - **PDF 分页的标尺**：`planPdfTiles` 里预留了 `ruler = cellSize * 0.9`；分片渲染用 `renderGrid(..., viewport)`，行列号按全局编号。新增分页参数时记得同步两处的空间估算。
-- **工程存储**：源图以 `Blob` 存 IndexedDB（不要转 base64）；设置用 `normalizeSettings(raw, defaults)` 补齐/夹紧并带 `PROJECT_VERSION`，以后加字段时保持向后兼容。`projectStore` 的 `dbPromise` 有缓存，测试用 `_resetDbForTests()` + `fake-indexeddb/auto`。
+- **工程存储**：源图以 `Blob` 存 IndexedDB（不要转 base64）；设置用 `normalizeSettings(raw, defaults)` 补齐/夹紧并带 `PROJECT_VERSION`，以后加字段时保持向后兼容。`projectStore` 的 `dbPromise` 有缓存，测试用 `_resetDbForTests()` + `fake-indexeddb/auto`。跨机器/归档用 **导出/导入 `.perler.json`**（源图 base64 内嵌）。网页无法打开系统文件管理器，不要再尝试“打开工程目录”。
 - 色卡是**屏幕参考值**，界面/文档需保留「以实物色卡为准」提示。
 - `reference/` 为只读外部数据，不要改；改色卡请改 `scripts/gen-palette.mjs` 后重生成。
 - 本地截图 `Snipaste_*.png` 已被 `.gitignore` 忽略；不要 `git add -f` 强加。

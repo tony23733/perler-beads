@@ -13,14 +13,24 @@ const emit = defineEmits<{
   save: [name: string]
   load: [id: string]
   delete: [id: string]
+  'export-file': []
+  'import-file': [file: File]
 }>()
 
 const name = ref(props.defaultName ?? '')
+const fileEl = ref<HTMLInputElement | null>(null)
 
 function onSave() {
   if (!props.canSave) return
   emit('save', name.value.trim())
   name.value = ''
+}
+
+function onImport(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (file) emit('import-file', file)
+  input.value = ''
 }
 
 function formatTime(ts: number) {
@@ -50,6 +60,32 @@ function formatTime(ts: number) {
       </button>
     </div>
     <p v-if="!canSave" class="text-[11px] text-slate-400">先选择一张图片才能保存工程。</p>
+
+    <div class="flex gap-2">
+      <button
+        type="button"
+        class="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-600 transition hover:border-slate-400 disabled:opacity-40"
+        :disabled="!canSave || busy"
+        @click="emit('export-file')"
+      >
+        导出工程文件
+      </button>
+      <button
+        type="button"
+        class="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-600 transition hover:border-slate-400"
+        :disabled="busy"
+        @click="fileEl?.click()"
+      >
+        导入工程文件
+      </button>
+      <input
+        ref="fileEl"
+        type="file"
+        accept=".json,application/json"
+        class="hidden"
+        @change="onImport"
+      />
+    </div>
 
     <ul v-if="projects.length" class="max-h-56 space-y-1 overflow-auto">
       <li

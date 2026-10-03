@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { DEFAULT_GRID_OPTIONS } from '../src/core/grid'
-import { PROJECT_VERSION, newProjectId, normalizeSettings } from '../src/core/project'
+import { PROJECT_VERSION, newProjectId, normalizeSettings, parseProjectFile, serializeProjectFile } from '../src/core/project'
 import type { ProjectRecord, ProjectSettingsSnapshot } from '../src/core/project'
 import {
   _resetDbForTests,
@@ -123,5 +123,28 @@ describe('projectStore (IndexedDB)', () => {
     const loaded = await loadProject(id)
     expect(loaded?.name).toBe('新')
     await deleteProject(id)
+  })
+})
+
+describe('project file (导出/导入)', () => {
+  it('serialize → parse 往返保持源图与设置', async () => {
+    const rec = makeRecord(newProjectId(), '导出工程', 1)
+    const text = await serializeProjectFile(rec)
+    expect(text).toContain('perler-beads-project')
+
+    const parsed = parseProjectFile(text, defaults)
+    expect(parsed.name).toBe('导出工程')
+    expect(parsed.sourceName).toBe('photo.png')
+    expect(parsed.settings.targetWidth).toBe(29)
+    expect(parsed.settings.maxColors).toBe(16)
+    expect(parsed.source.type).toBe('image/png')
+    const bytes = new Uint8Array(await parsed.source.arrayBuffer())
+    expect([...bytes]).toEqual([1, 2, 3, 4])
+  })
+
+  it('拒绝非 JSON / 非工程文件 / 缺源图', () => {
+    expect(() => parseProjectFile('not json', defaults)).toThrow()
+    expect(() => parseProjectFile('{}', defaults)).toThrow()
+    expect(() => parseProjectFile(JSON.stringify({ type: 'perler-beads-project' }), defaults)).toThrow()
   })
 })

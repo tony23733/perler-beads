@@ -15,9 +15,10 @@ import { hasTransparency, loadImageData } from './core/image'
 import { pixelate, setSourceImage } from './core/pixelateClient'
 import { guessBackgroundFromCorners } from './core/pixelate'
 import type { BackgroundMode } from './core/pixelate'
+import { downloadBlob } from './core/exporter'
 import type { DitherMode, RGB } from './types'
 import { DEFAULT_PALETTE_ID, getPalette, PALETTES } from './data/palettes'
-import { newProjectId, normalizeSettings, PROJECT_VERSION } from './core/project'
+import { newProjectId, normalizeSettings, parseProjectFile, PROJECT_VERSION, serializeProjectFile } from './core/project'
 import type { ProjectMeta, ProjectRecord, ProjectSettingsSnapshot } from './core/project'
 import { deleteProject, listProjects, loadProject, saveProject } from './core/projectStore'
 import type { PixelateResponse } from './workers/pixelate.worker'
@@ -289,20 +290,82 @@ async function onLoadProject(id: string) {
   try {
     const record = await loadProject(id)
     if (!record) throw new Error('工程不存在或已删除')
-    const imageData = await loadImageData(record.source)
-    aspect.value = imageData.width / imageData.height
-    sourceHasAlpha.value = hasTransparency(imageData)
-    if (sourceUrl.value) URL.revokeObjectURL(sourceUrl.value)
-    sourceUrl.value = URL.createObjectURL(record.source)
-    sourceName.value = record.sourceName
-    sourceFile.value = record.source
-    sourceReady.value = false
-    result.value = null
-    applySettings(normalizeSettings(record.settings, defaultSettings()))
-    await setSourceImage(imageData)
-    sourceReady.value = true
-    await run()
+    await loadRecordIntoApp(record)
     projectMessage.value = `已加载「${record.name}」`
+  } catch (e) {
+    projectError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    projectBusy.value = false
+  }
+}
+
+/** 把一条工程记录恢复到界面（源图 + 设置 + 重算） */
+async function loadRecordIntoApp(record: ProjectRecord) {
+  const imageData = await loadImageData(record.source)
+  aspect.value = imageData.width / imageData.height
+  sourceHasAlpha.value = hasTransparency(imageData)
+  if (sourceUrl.value) URL.revokeObjectURL(sourceUrl.value)
+  sourceUrl.value = URL.createObjectURL(record.source)
+  sourceName.value = record.sourceName
+  sourceFile.value = record.source
+  sourceReady.value = false
+  result.value = null
+  applySettings(normalizeSettings(record.settings, defaultSettings()))
+  await setSourceImage(imageData)
+  sourceReady.value = true
+  await run()
+}
+
+async function onExportProjectFile() {
+  const file = sourceFile.value
+  if (!file) return
+  projectBusy.value = true
+  projectError.value = null
+  projectMessage.value = null
+  try {
+    const now = Date.now()
+    const base = sourceName.value.replace(/\.[^./\\]+$/, '') || 'perler-project'
+    const record: ProjectRecord = {
+      version: PROJECT_VERSION,
+      id: newProjectId(),
+      name: base,
+      createdAt: now,
+      updatedAt: now,
+      sourceName: sourceName.value,
+      source: file,
+      settings: collectSettings(),
+    }
+    const text = await serializeProjectFile(record)
+    downloadBlob(new Blob([text], { type: 'application/json' }), `${base}.perler.json`)
+    projectMessage.value = '已导出工程文件（可放到任意文件夹）'
+  } catch (e) {
+    projectError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    projectBusy.value = false
+  }
+}
+
+async function onImportProjectFile(file: File) {
+  projectBusy.value = true
+  projectError.value = null
+  projectMessage.value = null
+  try {
+    const parsed = parseProjectFile(await file.text(), defaultSettings())
+    const record: ProjectRecord = {
+      version: parsed.version,
+      id: newProjectId(),
+      name: parsed.name,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      sourceName: parsed.sourceName,
+      source: parsed.source,
+      settings: parsed.settings,
+    }
+    await loadRecordIntoApp(record)
+    // 顺便存入 IndexedDB，下次可直接从列表加载
+    await saveProject(record)
+    await refreshProjects()
+    projectMessage.value = `已导入「${record.name}」`
   } catch (e) {
     projectError.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -527,6 +590,8 @@ onUnmounted(() => {
               @save="onSaveProject"
               @load="onLoadProject"
               @delete="onDeleteProject"
+              @export-file="onExportProjectFile"
+              @import-file="onImportProjectFile"
             />
             <p v-if="projectMessage" class="mt-2 text-xs text-emerald-600">{{ projectMessage }}</p>
             <p v-if="projectError" class="mt-2 text-xs text-red-600">{{ projectError }}</p>
