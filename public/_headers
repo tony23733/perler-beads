@@ -1,0 +1,16 @@
+# 带内容哈希的资源可以长期缓存
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Service Worker / 入口 / manifest 必须每次校验，否则更新不及时
+/sw.js
+  Cache-Control: no-cache
+
+/registerSW.js
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/manifest.webmanifest
+  Cache-Control: no-cache

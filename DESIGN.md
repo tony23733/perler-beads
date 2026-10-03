@@ -195,7 +195,9 @@ interface BeadColor {
 ```
 perler_beads/
 ├─ DESIGN.md                    # 本文档
+├─ README.md                    # 使用说明 + Cloudflare Pages 部署指南
 ├─ index.html
+├─ .nvmrc                       # Node 版本（Cloudflare Pages 构建用）
 ├─ package.json                 # scripts: dev/build/preview/test/typecheck/gen:palette
 ├─ vite.config.ts
 ├─ tsconfig.json
@@ -206,6 +208,7 @@ perler_beads/
 ├─ public/                      # 静态资源（直接拷贝到 dist/）
 │  ├─ favicon.svg
 │  ├─ apple-touch-icon.png
+│  ├─ _headers                  # Cloudflare Pages 缓存策略
 │  └─ icons/{icon-192,icon-512,icon-maskable-512}.png
 ├─ pwa.config.ts                # PWA manifest（可单测）
 ├─ reference/                   # 只读外部参考数据（不参与打包）
@@ -373,6 +376,8 @@ npm run build      # 输出 dist/：静态文件 + sw.js + manifest.webmanifest 
 
 `dist/` 是纯静态文件，**不需要任何后端**。PWA 的 Service Worker 需要 **HTTPS 或 localhost**，所以部署到提供 HTTPS 的静态托管即可满足。
 
+构建环境要求 Node **>= 20.19**（Vite 8）；已提供 `.nvmrc`（22）并在 `package.json` 写 `engines`。Cloudflare Pages 也可在环境变量里设 `NODE_VERSION=22`。缓存策略见 `public/_headers`（哈希资源长缓存，`sw.js`/`index.html`/`manifest` 不缓存）。
+
 > 重要：默认 `base: '/'`，产物的 `index.html` 用绝对路径引用 `/assets/...`、`/manifest.webmanifest`。
 > - 部署在**域名根目录**（Vercel / Netlify / Cloudflare Pages / 自定义域名）：不用改。
 > - 部署在**子路径**（如 GitHub Pages 的 `/<repo>/`）：在 `vite.config.ts` 加 `base: '/<repo>/'` 后重新构建。
@@ -383,7 +388,7 @@ npm run build      # 输出 dist/：静态文件 + sw.js + manifest.webmanifest 
 |---|---|---|
 | **Vercel** | 连 Git 仓库，Framework 选 Vite，Build `npm run build`，Output `dist` | 最省心，自动部署 |
 | **Netlify** | 连仓库（同上）或把 `dist/` 拖到 app.netlify.com/drop | 拖拽即上线 |
-| **Cloudflare Pages** | 连 Git，Build `npm run build`，输出目录 `dist` | 国内访问相对友好 |
+| **Cloudflare Pages**（首选） | 连 Git，Build `npm run build`，输出目录 `dist`；或 `npm run deploy:cf` | 免费流量/请求不限 |
 | **GitHub Pages** | 设 `base: '/<repo>/'`，把 `dist/` 发到 `gh-pages` 分支 | 需改 base |
 
 > 无需购买服务器，也无需数据库；这些平台都自带 HTTPS。
