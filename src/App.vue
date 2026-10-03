@@ -39,6 +39,7 @@ const tolerance = ref(30)
 const picking = ref(false)
 const sourceHasAlpha = ref(false)
 const minCoverage = ref(15)
+const livePreview = ref(true)
 const maxColors = ref(0)
 const dither = ref<DitherMode>('none')
 const ditherStrength = ref(1)
@@ -122,6 +123,12 @@ function requestRun() {
   void run()
 }
 
+/** 实时控件变化：开启实时预览时立即跑，否则退回防抖 */
+function onLiveChange() {
+  if (livePreview.value) requestRun()
+  else scheduleRun()
+}
+
 async function onSelectFile(file: File) {
   error.value = null
   if (sourceUrl.value) URL.revokeObjectURL(sourceUrl.value)
@@ -181,7 +188,7 @@ watch(
   scheduleRun,
 )
 // 实时：拖动这些滑块时尽快刷新预览
-watch([tolerance, minCoverage, ditherStrength], requestRun)
+watch([tolerance, minCoverage, ditherStrength], onLiveChange)
 
 onUnmounted(() => {
   disposed = true
@@ -394,7 +401,13 @@ onUnmounted(() => {
                   网格图纸
                 </button>
               </div>
-              <span v-if="busy" class="text-xs text-slate-400">计算中…</span>
+              <div class="flex items-center gap-3">
+                <span v-if="busy" class="text-xs text-slate-400">计算中…</span>
+                <label class="flex cursor-pointer items-center gap-1.5 text-xs text-slate-500">
+                  <input v-model="livePreview" type="checkbox" class="accent-indigo-500" />
+                  实时预览
+                </label>
+              </div>
             </div>
 
             <div

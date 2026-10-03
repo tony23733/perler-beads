@@ -330,7 +330,7 @@ npm run gen:palette      # 由 reference/ 重新生成色卡（一般不用跑�
 - **背景去除在源像素级完成**（`downsample`）：与 `removeColor` 距离在 `tolerance`（RGB 欧氏）内的源像素被剔除后求平均，避免边缘混色；前景像素占比低于 `minCoverage`（默认 0.15）的格子视为背景。`pixels` 是最终结果，`samples` 是未去除的原始平均色，专供界面拾色。改这块时不要图省事改成「先降采样再按色号剔除」。
 - **「保留背景」与「透明背景」对不透明照片完全等价**：前者与白底合成、后者按 alpha 判空，而普通照片 alpha 全为 255，故看起来一样。`hasTransparency()` 检测到无 alpha 时会禁用「透明背景」按钮（在把 ImageData 交给 Worker 前调用，因为 buffer 会被 transfer）。
 - **传给 Worker 的数据必须可结构化克隆**：Vue 的 `ref` 会把数组包成 Proxy，直接 `postMessage` 会报 `could not be cloned`。因此 `removeColor` 用 `shallowRef`，且 `pixelateClient.pixelate()` 会再转成普通数组。新增跨 Worker 参数时务必注意（`tests/pixelateClient.test.ts` 防回归）。
-- **实时控件与合并策略**：容差 / 边缘阈值 / 抖动强度用 `requestRun()` 立即触发（拖动实时刷新）；尺寸 / 色卡 / 模式等用 `scheduleRun()`（120ms 防抖）。`run()` 内部用 `running`/`queued` 保证同一时刻只跑一个任务，结束后再用**最新**参数补跑一次，因此拖动滑块不会堆积请求（`busy` 会在队列排空后才消失）。不要改回单纯的 `watch` 防抖，否则又会变成「停下来才更新」。
+- **实时控件与合并策略**：容差 / 边缘阈值 / 抖动强度默认走 `requestRun()` 立即触发（拖动实时刷新），可通过预览区右上角的「实时预览」开关关闭，关闭后改走 120ms 防抖。尺寸 / 色卡 / 模式等始终用 `scheduleRun()`。`run()` 内部用 `running`/`queued` 保证同一时刻只跑一个任务，结束后再用**最新**参数补跑一次，因此拖动滑块不会堆积请求（`busy` 会在队列排空后才消失）。不要改回单纯的 `watch` 防抖，否则又会变成「停下来才更新」。
 - 色卡是**屏幕参考值**，界面/文档需保留「以实物色卡为准」提示。
 - `reference/` 为只读外部数据，不要改；改色卡请改 `scripts/gen-palette.mjs` 后重生成。
 - 本地截图 `Snipaste_*.png` 已被 `.gitignore` 忽略；不要 `git add -f` 强加。
