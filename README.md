@@ -28,6 +28,10 @@ npm run preview          # 本地预览构建结果（http://localhost:4173）
 
 ### 方式 A：连接 Git 仓库（推荐，push 后自动部署）
 
+> 注意：Cloudflare 的 `Create` 页面现在有 **Workers** 和 **Pages** 两套流程，别选错：
+> - 选 **Pages**：只需 Build command `npm run build` + **Build output directory `dist`**（最省事，无需改代码）。
+> - 若不慎进了 **Workers**（表单里出现 `Deploy command: npx wrangler deploy`）：项目已附 `wrangler.jsonc`（静态资源指向 `dist`），保持 Build command = `npm run build`、Deploy command = `npx wrangler deploy` 即可；Preview command 改为 `npx wrangler versions upload`，或关掉 `Enable Preview builds`。
+
 1. 把本项目推到 GitHub / GitLab。
 2. 打开 [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Workers & Pages** → **Create** → **Pages** → **Connect to Git**。
 3. 选择仓库，构建配置填：

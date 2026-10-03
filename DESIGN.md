@@ -211,6 +211,7 @@ perler_beads/
 │  ├─ _headers                  # Cloudflare Pages 缓存策略
 │  └─ icons/{icon-192,icon-512,icon-maskable-512}.png
 ├─ pwa.config.ts                # PWA manifest（可单测）
+├─ wrangler.jsonc               # Cloudflare Workers 静态资源部署配置（用 Pages 时忽略）
 ├─ reference/                   # 只读外部参考数据（不参与打包）
 │  └─ pindou-color-data/        # HansBug/pindou-color-data (MIT)
 │     ├─ LICENSE / manifest.json
@@ -389,6 +390,7 @@ npm run build      # 输出 dist/：静态文件 + sw.js + manifest.webmanifest 
 | **Vercel** | 连 Git 仓库，Framework 选 Vite，Build `npm run build`，Output `dist` | 最省心，自动部署 |
 | **Netlify** | 连仓库（同上）或把 `dist/` 拖到 app.netlify.com/drop | 拖拽即上线 |
 | **Cloudflare Pages**（首选） | 连 Git，Build `npm run build`，输出目录 `dist`；或 `npm run deploy:cf` | 免费流量/请求不限 |
+| **Cloudflare Workers（静态资源）** | 若 UI 只给 Workers 流程：项目已附 `wrangler.jsonc`，Build `npm run build` + Deploy `npx wrangler deploy` | 与 Pages 等价，略多配置 |
 | **GitHub Pages** | 设 `base: '/<repo>/'`，把 `dist/` 发到 `gh-pages` 分支 | 需改 base |
 
 > 无需购买服务器，也无需数据库；这些平台都自带 HTTPS。

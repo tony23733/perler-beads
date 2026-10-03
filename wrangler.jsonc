@@ -1,0 +1,10 @@
+{
+  // 以 Cloudflare Workers 的「静态资源（Static Assets）」方式部署。
+  // 若使用 Cloudflare Pages（推荐，更简单），此文件会被忽略，无需删除。
+  "name": "perler-beads",
+  "compatibility_date": "2025-01-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
