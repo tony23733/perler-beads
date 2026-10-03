@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import ColorStats from './components/ColorStats.vue'
 import ExportPanel from './components/ExportPanel.vue'
 import GridPreview from './components/GridPreview.vue'
@@ -7,6 +7,7 @@ import GridSettings from './components/GridSettings.vue'
 import ImageUploader from './components/ImageUploader.vue'
 import PaletteSelect from './components/PaletteSelect.vue'
 import PixelPreview from './components/PixelPreview.vue'
+import ProjectPanel from './components/ProjectPanel.vue'
 import SizeSettings from './components/SizeSettings.vue'
 import { DEFAULT_GRID_OPTIONS } from './core/grid'
 import type { GridRenderOptions } from './core/grid'
@@ -16,6 +17,9 @@ import { guessBackgroundFromCorners } from './core/pixelate'
 import type { BackgroundMode } from './core/pixelate'
 import type { DitherMode, RGB } from './types'
 import { DEFAULT_PALETTE_ID, getPalette, PALETTES } from './data/palettes'
+import { newProjectId, normalizeSettings, PROJECT_VERSION } from './core/project'
+import type { ProjectMeta, ProjectRecord, ProjectSettingsSnapshot } from './core/project'
+import { deleteProject, listProjects, loadProject, saveProject } from './core/projectStore'
 import type { PixelateResponse } from './workers/pixelate.worker'
 
 const DEFAULT_LONG_SIDE = 50
@@ -49,6 +53,12 @@ const COLOR_LIMITS = [8, 12, 16, 20, 24, 32]
 const result = shallowRef<PixelateResponse | null>(null)
 const busy = ref(false)
 const error = ref<string | null>(null)
+
+const sourceFile = shallowRef<Blob | null>(null)
+const projects = ref<ProjectMeta[]>([])
+const projectBusy = ref(false)
+const projectMessage = ref<string | null>(null)
+const projectError = ref<string | null>(null)
 
 const viewMode = ref<'pixel' | 'grid'>('pixel')
 const gridOptions = ref<GridRenderOptions>({ ...DEFAULT_GRID_OPTIONS })
@@ -132,6 +142,7 @@ function onLiveChange() {
 async function onSelectFile(file: File) {
   error.value = null
   if (sourceUrl.value) URL.revokeObjectURL(sourceUrl.value)
+  sourceFile.value = file
   sourceUrl.value = URL.createObjectURL(file)
   sourceName.value = file.name
   sourceReady.value = false
@@ -182,6 +193,139 @@ function autoPickBackground() {
     picking.value = false
   }
 }
+
+// ---- 工程保存 / 加载 ----
+
+function defaultSettings(): ProjectSettingsSnapshot {
+  return {
+    targetWidth: DEFAULT_LONG_SIDE,
+    targetHeight: DEFAULT_LONG_SIDE,
+    locked: true,
+    paletteId: DEFAULT_PALETTE_ID,
+    background: 'keep',
+    removeColor: null,
+    tolerance: 30,
+    minCoverage: 15,
+    maxColors: 0,
+    dither: 'none',
+    ditherStrength: 1,
+    gridOptions: { ...DEFAULT_GRID_OPTIONS },
+  }
+}
+
+function collectSettings(): ProjectSettingsSnapshot {
+  return {
+    targetWidth: targetWidth.value,
+    targetHeight: targetHeight.value,
+    locked: locked.value,
+    paletteId: paletteId.value,
+    background: background.value,
+    removeColor: removeColor.value ? ([...removeColor.value] as RGB) : null,
+    tolerance: tolerance.value,
+    minCoverage: minCoverage.value,
+    maxColors: maxColors.value,
+    dither: dither.value,
+    ditherStrength: ditherStrength.value,
+    gridOptions: { ...gridOptions.value },
+  }
+}
+
+function applySettings(s: ProjectSettingsSnapshot) {
+  targetWidth.value = s.targetWidth
+  targetHeight.value = s.targetHeight
+  locked.value = s.locked
+  paletteId.value = s.paletteId
+  background.value = s.background
+  removeColor.value = s.removeColor ? ([...s.removeColor] as RGB) : null
+  tolerance.value = s.tolerance
+  minCoverage.value = s.minCoverage
+  maxColors.value = s.maxColors
+  dither.value = s.dither
+  ditherStrength.value = s.ditherStrength
+  gridOptions.value = { ...s.gridOptions }
+}
+
+async function refreshProjects() {
+  try {
+    projects.value = await listProjects()
+  } catch (e) {
+    projectError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function onSaveProject(name: string) {
+  const file = sourceFile.value
+  if (!file) return
+  projectBusy.value = true
+  projectError.value = null
+  projectMessage.value = null
+  try {
+    const now = Date.now()
+    const existing = name ? projects.value.find((p) => p.name === name) : undefined
+    const record: ProjectRecord = {
+      version: PROJECT_VERSION,
+      id: existing?.id ?? newProjectId(),
+      name: name || sourceName.value || `工程 ${new Date(now).toLocaleString()}`,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      sourceName: sourceName.value,
+      source: file,
+      settings: collectSettings(),
+    }
+    await saveProject(record)
+    await refreshProjects()
+    projectMessage.value = `已保存「${record.name}」`
+  } catch (e) {
+    projectError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    projectBusy.value = false
+  }
+}
+
+async function onLoadProject(id: string) {
+  projectBusy.value = true
+  projectError.value = null
+  projectMessage.value = null
+  try {
+    const record = await loadProject(id)
+    if (!record) throw new Error('工程不存在或已删除')
+    const imageData = await loadImageData(record.source)
+    aspect.value = imageData.width / imageData.height
+    sourceHasAlpha.value = hasTransparency(imageData)
+    if (sourceUrl.value) URL.revokeObjectURL(sourceUrl.value)
+    sourceUrl.value = URL.createObjectURL(record.source)
+    sourceName.value = record.sourceName
+    sourceFile.value = record.source
+    sourceReady.value = false
+    result.value = null
+    applySettings(normalizeSettings(record.settings, defaultSettings()))
+    await setSourceImage(imageData)
+    sourceReady.value = true
+    await run()
+    projectMessage.value = `已加载「${record.name}」`
+  } catch (e) {
+    projectError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    projectBusy.value = false
+  }
+}
+
+async function onDeleteProject(id: string) {
+  projectBusy.value = true
+  projectError.value = null
+  projectMessage.value = null
+  try {
+    await deleteProject(id)
+    await refreshProjects()
+    projectMessage.value = '已删除工程'
+  } catch (e) {
+    projectError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    projectBusy.value = false
+  }
+}
+
+onMounted(refreshProjects)
 
 watch(
   [targetWidth, targetHeight, paletteId, background, maxColors, dither, removeColor],
@@ -372,6 +516,20 @@ onUnmounted(() => {
                 </p>
               </div>
             </div>
+          </div>
+
+          <div>
+            <h2 class="mb-2 text-sm font-semibold text-slate-700">4. 工程</h2>
+            <ProjectPanel
+              :projects="projects"
+              :can-save="hasSource"
+              :busy="projectBusy"
+              @save="onSaveProject"
+              @load="onLoadProject"
+              @delete="onDeleteProject"
+            />
+            <p v-if="projectMessage" class="mt-2 text-xs text-emerald-600">{{ projectMessage }}</p>
+            <p v-if="projectError" class="mt-2 text-xs text-red-600">{{ projectError }}</p>
           </div>
 
           <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">

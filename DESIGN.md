@@ -1,8 +1,8 @@
 # 拼豆图纸生成器 — 设计文档
 
 > 状态：**第二阶段进行中** —— 第一阶段 MVP 已验收。
-> 已完成：限制颜色数量、抖动（Floyd–Steinberg / Bayer 有序）、网格行列坐标、背景处理（保留 / 透明 / 按颜色去除）、分页 A4 PDF 导出。
-> 下一步建议：**保存/加载工程** → 撤销/重做 → PWA。
+> 已完成：限制颜色数量、抖动（Floyd–Steinberg / Bayer 有序）、网格行列坐标、背景处理（保留 / 透明 / 按颜色去除）、分页 A4 PDF 导出、工程保存/加载（IndexedDB）。
+> 下一步建议：**手工编辑像素 + 撤销/重做** → PWA。
 > 目标：把一张照片转换成 MARD 色号的拼豆像素图，并绘制可打印的网格图纸。
 > 定位：**第一阶段纯本地使用**（浏览器打开即用，无服务器、无 PWA）。功能成熟后再考虑部署与打包。
 
@@ -91,9 +91,11 @@ npm run preview    # 本地预览打包结果
 - ✅ **分页 A4 PDF 导出**：把整张网格按每格 N mm 切页（4/5/6/8mm），自动或手动选择纵向/横向（默认选页数最少的方向）；每页带标题、全局行列范围、页码、四角拼接定位角标与页脚；可选附带用色清单页。分片渲染复用 `renderGrid` 的**视口（viewport）**能力，行列坐标按全局编号。PDF 文案用 ASCII（jsPDF 内置字体不含中文）。
 
 **待做（建议顺序）**
-1. **保存/加载工程文件**（本地 JSON 或 IndexedDB）。← **下一步从这里开始**
-2. **撤销/重做**（需要先有手工编辑像素才有意义）。
-3. **接入 PWA**（manifest + Service Worker），手机「添加到主屏幕」、离线可用；此时需要 HTTPS 静态托管。
+- ✅ **工程保存 / 加载**：把全部设置 + 源图保存到 IndexedDB（源图以 Blob 存，无需 base64）。可命名保存（同名覆盖）、列表加载、删除。设置带 `PROJECT_VERSION` 与 `normalizeSettings()` 容错，向后兼容。纯本地，无后端。
+
+**待做（建议顺序）**
+1. **手工编辑像素（点/拖改色、吸管）+ 撤销/重做**：撤销/重做需要先有手工编辑才有意义，建议一起做。← **下一步从这里开始**
+2. **接入 PWA**（manifest + Service Worker），手机「添加到主屏幕」、离线可用；此时需要 HTTPS 静态托管。
 
 **暂缓（以后再说）**
 - ⏸️ **批量处理多张图**：用户决定暂时不做。
@@ -229,7 +231,9 @@ perler_beads/
 │  │  ├─ dither.ts              # Floyd–Steinberg / Bayer 有序抖动
 │  │  ├─ grid.ts                # 网格图纸渲染（可测的 2D 上下文接口）
 │  │  ├─ exporter.ts            # PNG（含用色清单）/ CSV 导出
-│  │  ├─ pdf.ts                # A4 分页规划 + jsPDF 导出（分片用 grid 视口）
+│  │  ├─ pdf.ts                 # A4 分页规划 + jsPDF 导出（分片用 grid 视口）
+│  │  ├─ project.ts             # 工程设置快照与版本化 normalize（纯逻辑）
+│  │  ├─ projectStore.ts        # IndexedDB 工程存取（源图存 Blob）
 │  │  ├─ image.ts               # 文件 → ImageData
 │  │  └─ pixelateClient.ts      # Worker 客户端（共享 worker + id 对应并发）
 │  ├─ workers/
@@ -238,7 +242,7 @@ perler_beads/
 │     ├─ mard221.ts             # 生成：221 色
 │     ├─ mard291.ts             # 生成：291 色
 │     └─ index.ts               # 运行时封装（预计算 Lab、默认色卡）
-└─ tests/                       # 13 个文件 / 103 项（vitest）
+└─ tests/                       # 14 个文件 / 109 项（vitest）
 ```
 
 ---
@@ -288,10 +292,9 @@ interface ProjectSettings {
    - ~~抖动~~ ✅
    - ~~网格坐标标注~~ ✅（随网格图纸完成）
    - ~~背景处理~~ ✅（保留 / 透明 / 按颜色去除；源像素级去背景 + 预览拾色 + 自动取四角 + 容差 + 边缘阈值）
-   - ~~分页 A4 PDF~~ ✅（`core/pdf.ts` + `ExportPanel`；4/5/6/8mm 每格，自动纵向/横向，页码 + 全局行列范围 + 四角拼接角标，可选清单页；jsPDF 动态 import 代码分包）
-   - **保存/加载工程** ← 下一步
-   - 保存/加载工程
-   - 撤销/重做
+   - ~~分页 A4 PDF~~ ✅（`core/pdf.ts` + `ExportPanel`；每格 mm 连续可调，自动纵向/横向，页码 + 全局行列范围 + 四角拼接角标，可选清单页；jsPDF 动态 import 代码分包）
+   - ~~保存/加载工程~~ ✅（`core/project.ts` + `core/projectStore.ts` + `ProjectPanel`；IndexedDB 存源图 Blob，设置版本化 + 容错，同名覆盖）
+   - **撤销/重做** ← 下一步
    - 批量处理 —— ⏸️ **暂缓（以后再说）**
 10. （第二阶段）接入 PWA + 静态托管；需要 HTTPS 时才部署。
 11. （第三阶段，可选）Tauri 打包桌面版。
@@ -317,7 +320,7 @@ interface ProjectSettings {
 npm install              # 首次
 npm run dev              # 开发，http://localhost:5173
 npm run dev -- --host    # 手机同局域网访问
-npm test                 # 103 项单元测试
+npm test                 # 109 项单元测试
 npm run typecheck        # vue-tsc 类型检查
 npm run build            # 生产构建（含类型检查）
 npm run gen:palette      # 由 reference/ 重新生成色卡（一般不用跑）
@@ -337,10 +340,11 @@ npm run gen:palette      # 由 reference/ 重新生成色卡（一般不用跑�
 - **实时控件与合并策略**：容差 / 边缘阈值 / 抖动强度默认走 `requestRun()` 立即触发（拖动实时刷新），可通过预览区右上角的「实时预览」开关关闭，关闭后改走 120ms 防抖。尺寸 / 色卡 / 模式等始终用 `scheduleRun()`。`run()` 内部用 `running`/`queued` 保证同一时刻只跑一个任务，结束后再用**最新**参数补跑一次，因此拖动滑块不会堆积请求（`busy` 会在队列排空后才消失）。不要改回单纯的 `watch` 防抖，否则又会变成「停下来才更新」。
 - **PDF 中文问题**：jsPDF 内置 Helvetica 不含中文字形，PDF 内的标题/页码/表头一律用 ASCII（如 `Page 1/4`、`Cols 1-30`），不要写中文，否则乱码或报错。
 - **PDF 分页的标尺**：`planPdfTiles` 里预留了 `ruler = cellSize * 0.9`；分片渲染用 `renderGrid(..., viewport)`，行列号按全局编号。新增分页参数时记得同步两处的空间估算。
+- **工程存储**：源图以 `Blob` 存 IndexedDB（不要转 base64）；设置用 `normalizeSettings(raw, defaults)` 补齐/夹紧并带 `PROJECT_VERSION`，以后加字段时保持向后兼容。`projectStore` 的 `dbPromise` 有缓存，测试用 `_resetDbForTests()` + `fake-indexeddb/auto`。
 - 色卡是**屏幕参考值**，界面/文档需保留「以实物色卡为准」提示。
 - `reference/` 为只读外部数据，不要改；改色卡请改 `scripts/gen-palette.mjs` 后重生成。
 - 本地截图 `Snipaste_*.png` 已被 `.gitignore` 忽略；不要 `git add -f` 强加。
 
 ### 10.3 下一步
 
-从 **保存/加载工程** 开始（见 3.2）：把当前的所有设置与源图/网格保存到本地（JSON 或 IndexedDB），下次可原样恢复。注意源图可能是大图，优先考虑 IndexedDB 存 Blob；设置部分用 JSON 即可。
+从 **撤销/重做** 开始（见 3.2）。注意：目前结果只是「参数 → 网格」的派生值，没有手工编辑，撤销/重做的意义要等**手工编辑像素**做完后才体现。建议先做**像素编辑**（点/拖改色、吸管），再用命令栈实现撤销/重做。

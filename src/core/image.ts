@@ -7,7 +7,7 @@ const MAX_DIMENSION = 6000
  * 把图片文件解码并绘制到画布，返回 ImageData。
  * 超过 MAX_DIMENSION 时按比例缩小。
  */
-export async function loadImageData(file: File): Promise<ImageData> {
+export async function loadImageData(file: Blob): Promise<ImageData> {
   const bitmap = await createImageBitmap(file)
   try {
     const { width, height } = bitmap
