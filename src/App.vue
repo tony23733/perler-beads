@@ -10,7 +10,7 @@ import PixelPreview from './components/PixelPreview.vue'
 import SizeSettings from './components/SizeSettings.vue'
 import { DEFAULT_GRID_OPTIONS } from './core/grid'
 import type { GridRenderOptions } from './core/grid'
-import { loadImageData } from './core/image'
+import { hasTransparency, loadImageData } from './core/image'
 import { pixelate, setSourceImage } from './core/pixelateClient'
 import { guessBackgroundFromCorners } from './core/pixelate'
 import type { BackgroundMode } from './core/pixelate'
@@ -37,6 +37,8 @@ const background = ref<BackgroundMode>('keep')
 const removeColor = shallowRef<RGB | null>(null)
 const tolerance = ref(30)
 const picking = ref(false)
+const sourceHasAlpha = ref(false)
+const minCoverage = ref(15)
 const maxColors = ref(0)
 const dither = ref<DitherMode>('none')
 const ditherStrength = ref(1)
@@ -77,6 +79,7 @@ async function run() {
       background: background.value,
       removeColor: removeColor.value ? [...removeColor.value] : undefined,
       tolerance: tolerance.value,
+      minCoverage: minCoverage.value / 100,
       maxColors: maxColors.value || undefined,
       dither: dither.value,
       ditherStrength: ditherStrength.value,
@@ -107,6 +110,7 @@ async function onSelectFile(file: File) {
   try {
     const imageData = await loadImageData(file)
     aspect.value = imageData.width / imageData.height
+    sourceHasAlpha.value = hasTransparency(imageData)
 
     // 默认让长边 = 50 颗，保持比例
     if (imageData.width >= imageData.height) {
@@ -151,7 +155,7 @@ function autoPickBackground() {
 }
 
 watch(
-  [targetWidth, targetHeight, paletteId, background, maxColors, dither, ditherStrength, removeColor, tolerance],
+  [targetWidth, targetHeight, paletteId, background, maxColors, dither, ditherStrength, removeColor, tolerance, minCoverage],
   scheduleRun,
 )
 
@@ -252,8 +256,9 @@ onUnmounted(() => {
                 </button>
                 <button
                   type="button"
-                  class="flex-1 rounded-lg border px-2 py-2 text-xs transition"
+                  class="flex-1 rounded-lg border px-2 py-2 text-xs transition disabled:cursor-not-allowed disabled:opacity-50"
                   :class="background === 'transparent' ? 'border-indigo-400 bg-indigo-50 text-indigo-600' : 'border-slate-300 text-slate-500'"
+                  :disabled="hasSource && !sourceHasAlpha"
                   @click="background = 'transparent'"
                 >
                   透明背景
@@ -267,6 +272,9 @@ onUnmounted(() => {
                   去除背景
                 </button>
               </div>
+              <p class="text-[11px] leading-4 text-slate-400">
+                「透明背景」仅对自带透明通道的图片（如抠好的 PNG）有效，普通照片与「保留背景」效果相同，请用「去除背景」。
+              </p>
 
               <div
                 v-if="background === 'remove'"
@@ -294,6 +302,21 @@ onUnmounted(() => {
                     @input="tolerance = Number(($event.target as HTMLInputElement).value)"
                   />
                 </label>
+                <label class="block">
+                  <span class="mb-1 flex items-center justify-between text-xs text-slate-500">
+                    <span>边缘阈值（前景占比）</span>
+                    <span>{{ minCoverage }}%</span>
+                  </span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="50"
+                    step="5"
+                    :value="minCoverage"
+                    class="w-full accent-indigo-500"
+                    @input="minCoverage = Number(($event.target as HTMLInputElement).value)"
+                  />
+                </label>
                 <div class="flex gap-2">
                   <button
                     type="button"
@@ -313,7 +336,7 @@ onUnmounted(() => {
                   </button>
                 </div>
                 <p class="text-[11px] leading-4 text-slate-400">
-                  与背景色相近的豆子会被去掉（不放豆子），且不参与配色统计。
+                  容差越大去除越多；边缘阈值用于过滤零星的残留色块。去掉的格子不放豆子，也不参与配色统计。
                 </p>
               </div>
             </div>

@@ -178,6 +178,38 @@ describe('downsample', () => {
     })
     expect(pixels).toEqual([[10, 20, 30]])
   })
+
+  it('前景占比低于阈值时整格视为背景', () => {
+    // 10 个像素里只有 1 个前景 → 占比 10% < 默认 15%
+    const pixels10: RGB[] = Array.from({ length: 10 }, (_, i) =>
+      i === 0 ? [200, 0, 0] : [255, 255, 255],
+    )
+    const src = makeImage(10, 1, pixels10)
+    const { pixels } = downsample(src, {
+      targetWidth: 1,
+      targetHeight: 1,
+      background: 'remove',
+      removeColor: [255, 255, 255],
+      tolerance: 10,
+    })
+    expect(pixels).toEqual([null])
+  })
+
+  it('把阈值调低后保留少量前景', () => {
+    const pixels10: RGB[] = Array.from({ length: 10 }, (_, i) =>
+      i === 0 ? [200, 0, 0] : [255, 255, 255],
+    )
+    const src = makeImage(10, 1, pixels10)
+    const { pixels } = downsample(src, {
+      targetWidth: 1,
+      targetHeight: 1,
+      background: 'remove',
+      removeColor: [255, 255, 255],
+      tolerance: 10,
+      minCoverage: 0,
+    })
+    expect(pixels).toEqual([[200, 0, 0]])
+  })
 })
 
 describe('guessBackgroundFromCorners', () => {

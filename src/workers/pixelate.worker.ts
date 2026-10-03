@@ -30,6 +30,8 @@ export interface PixelateRequest {
   removeColor?: RGB
   /** remove 模式的颜色容差（RGB 欧氏距离） */
   tolerance?: number
+  /** remove 模式的前景占比阈值（0-1） */
+  minCoverage?: number
   /** 限制使用的颜色数量；0 / 未设为不限制 */
   maxColors?: number
   /** 抖动模式 */
@@ -92,6 +94,7 @@ ctx.onmessage = (e: MessageEvent<WorkerRequest>) => {
       background: req.background,
       removeColor: req.removeColor,
       tolerance: req.tolerance,
+      minCoverage: req.minCoverage,
     })
     const activePalette =
       req.maxColors && req.maxColors > 0 && req.maxColors < req.palette.colors.length

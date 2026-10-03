@@ -82,7 +82,10 @@ npm run preview    # 本地预览打包结果
 - ✅ **限制使用颜色数量**（8/12/16/20/24/32 色），用 palette-constrained k-means 自动选最合适的子集。
 - ✅ **抖动**：Floyd–Steinberg 误差扩散 / Bayer 有序抖动（在两最近色卡色间按比例抖动，纯色区域不产生杂色），可选，且在选定 N 色内抖动。
 - ✅ **网格坐标标注**（行/列号，从 1 开始）。
-- ✅ **背景处理**：保留背景 / 透明背景 / 按颜色去除。去除模式支持在像素预览里点选背景色、自动取四角、容差调节；在**源像素级**剔除背景后再做区域平均，避免边缘混色；去掉的格子不放豆子、也不参与限色与统计。
+- ✅ **背景处理**：保留背景 / 透明背景 / 按颜色去除。
+  - 「保留背景」：普通照片的默认项，背景照常放豆子。
+  - 「透明背景」：仅对自带 alpha 通道的图片（抠好的 PNG）有意义（按平均 alpha 低于阈值判空）；对不透明照片与「保留背景」完全相同，界面会在无 alpha 时禁用并提示。
+  - 「按颜色去除」：在像素预览里点选背景色、自动取四角、容差调节，外加**边缘阈值**（前景占比低于该值的格子视为背景，清掉零星残留）；在**源像素级**剔除背景后再做区域平均，避免边缘混色；去掉的格子不放豆子、也不参与限色与统计。
 
 **待做（建议顺序）**
 1. **图纸分页导出 A4 PDF**：每页带页码与拼接定位标记。← **下一步从这里开始**
@@ -232,7 +235,7 @@ perler_beads/
 │     ├─ mard221.ts             # 生成：221 色
 │     ├─ mard291.ts             # 生成：291 色
 │     └─ index.ts               # 运行时封装（预计算 Lab、默认色卡）
-└─ tests/                       # 11 个文件 / 92 项（vitest）
+└─ tests/                       # 12 个文件 / 95 项（vitest）
 ```
 
 ---
@@ -281,7 +284,7 @@ interface ProjectSettings {
    - ~~限制使用颜色数量~~ ✅
    - ~~抖动~~ ✅
    - ~~网格坐标标注~~ ✅（随网格图纸完成）
-   - ~~背景处理~~ ✅（保留 / 透明 / 按颜色去除；源像素级去背景 + 预览拾色 + 自动取四角 + 容差）
+   - ~~背景处理~~ ✅（保留 / 透明 / 按颜色去除；源像素级去背景 + 预览拾色 + 自动取四角 + 容差 + 边缘阈值）
    - **分页 A4 PDF** ← 下一步
    - 保存/加载工程
    - 撤销/重做
@@ -310,7 +313,7 @@ interface ProjectSettings {
 npm install              # 首次
 npm run dev              # 开发，http://localhost:5173
 npm run dev -- --host    # 手机同局域网访问
-npm test                 # 92 项单元测试
+npm test                 # 95 项单元测试
 npm run typecheck        # vue-tsc 类型检查
 npm run build            # 生产构建（含类型检查）
 npm run gen:palette      # 由 reference/ 重新生成色卡（一般不用跑）
@@ -324,7 +327,8 @@ npm run gen:palette      # 由 reference/ 重新生成色卡（一般不用跑�
 - **CIEDE2000 大色差特性**：在缺少灰阶的色卡上，中灰可能匹配到同亮度饱和色（与参考库 `delta-e` 逐位一致，非 bug）；真实 MARD 含完整灰阶无此问题。`tests/deltaE.reference.test.ts` 持续校验。
 - **有序抖动**用「最近两色按比例」策略（`ratio = d1/(d1+d2)`），保证纯色区域不产生杂色；**不要**退回「固定幅度阈值扰动」写法。
 - **限色**用 palette-constrained k-means（`quantize.ts`），聚类用 Lab 欧氏距离（快），最终匹配用 CIEDE2000（准）。
-- **背景去除在源像素级完成**（`downsample`）：与 `removeColor` 距离在 `tolerance`（RGB 欧氏）内的源像素被剔除后求平均，避免边缘混色；`pixels` 是最终结果，`samples` 是未去除的原始平均色，专供界面拾色。改这块时不要图省事改成「先降采样再按色号剔除」。
+- **背景去除在源像素级完成**（`downsample`）：与 `removeColor` 距离在 `tolerance`（RGB 欧氏）内的源像素被剔除后求平均，避免边缘混色；前景像素占比低于 `minCoverage`（默认 0.15）的格子视为背景。`pixels` 是最终结果，`samples` 是未去除的原始平均色，专供界面拾色。改这块时不要图省事改成「先降采样再按色号剔除」。
+- **「保留背景」与「透明背景」对不透明照片完全等价**：前者与白底合成、后者按 alpha 判空，而普通照片 alpha 全为 255，故看起来一样。`hasTransparency()` 检测到无 alpha 时会禁用「透明背景」按钮（在把 ImageData 交给 Worker 前调用，因为 buffer 会被 transfer）。
 - **传给 Worker 的数据必须可结构化克隆**：Vue 的 `ref` 会把数组包成 Proxy，直接 `postMessage` 会报 `could not be cloned`。因此 `removeColor` 用 `shallowRef`，且 `pixelateClient.pixelate()` 会再转成普通数组。新增跨 Worker 参数时务必注意（`tests/pixelateClient.test.ts` 防回归）。
 - 色卡是**屏幕参考值**，界面/文档需保留「以实物色卡为准」提示。
 - `reference/` 为只读外部数据，不要改；改色卡请改 `scripts/gen-palette.mjs` 后重生成。

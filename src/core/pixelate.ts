@@ -22,6 +22,12 @@ export interface DownsampleOptions {
   removeColor?: RGB
   /** remove 模式的颜色容差：RGB 欧氏距离上限（0-441，默认 30） */
   tolerance?: number
+  /**
+   * remove 模式下的前景占比阈值（0-1，默认 0.15）：
+   * 一个格子里前景像素占比低于该值时，整格视为背景 → 空格。
+   * 用于清掉边缘/杂色导致的零星残留。
+   */
+  minCoverage?: number
 }
 
 export interface DownsampleResult {
@@ -99,6 +105,7 @@ export function downsample(src: RgbaImage, opts: DownsampleOptions): DownsampleR
   const alphaThreshold = opts.alphaThreshold ?? 128
   const removeColor = opts.background === 'remove' ? opts.removeColor : undefined
   const tolerance = opts.tolerance ?? 30
+  const minCoverage = opts.minCoverage ?? 0.15
   const { data, width: sw, height: sh } = src
   if (sw < 1 || sh < 1) throw new Error('源图尺寸非法')
 
@@ -160,7 +167,8 @@ export function downsample(src: RgbaImage, opts: DownsampleOptions): DownsampleR
       samples[idx] = [Math.round(r), Math.round(g), Math.round(b)]
 
       if (opts.background === 'remove' && removeColor) {
-        if (fgA === 0 || fgCount === 0) {
+        const coverage = count > 0 ? fgCount / count : 0
+        if (fgA === 0 || fgCount === 0 || coverage < minCoverage) {
           pixels[idx] = null
         } else {
           pixels[idx] = [
