@@ -157,16 +157,22 @@ const maxScale = () =>
         <span class="mb-2 block text-xs font-medium text-slate-600">A4 分页 PDF</span>
         <div class="space-y-2">
           <label class="block">
-            <span class="mb-1 block text-xs text-slate-500">每格边长</span>
-            <select
-              v-model.number="pdfCellSize"
-              class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-indigo-400 focus:outline-none"
-            >
-              <option :value="4">4 mm（紧凑）</option>
-              <option :value="5">5 mm</option>
-              <option :value="6">6 mm（标准）</option>
-              <option :value="8">8 mm（舒适）</option>
-            </select>
+            <span class="mb-1 flex items-center justify-between text-xs text-slate-500">
+              <span>每格打印边长</span>
+              <span>{{ pdfCellSize }} mm</span>
+            </span>
+            <input
+              type="range"
+              min="2"
+              max="16"
+              step="1"
+              :value="pdfCellSize"
+              class="w-full accent-indigo-500"
+              @input="pdfCellSize = Number(($event.target as HTMLInputElement).value)"
+            />
+            <span class="mt-1 block text-[11px] text-slate-400">
+              每格越小，每页放得越多、总页数越少（屏幕预览的「格子大小」只影响显示大小，与打印无关）
+            </span>
           </label>
           <label class="block">
             <span class="mb-1 block text-xs text-slate-500">纸张方向</span>
@@ -184,7 +190,7 @@ const maxScale = () =>
             附带用色清单页
           </label>
           <p class="text-xs text-slate-400">
-            约 {{ pdfPlan.pageCount }} 页图纸 · 每页 {{ pdfPlan.colsPerPage }}×{{ pdfPlan.rowsPerPage }} 颗
+            约 {{ pdfPlan.pageCount }} 页图纸 · 每页 {{ pdfPlan.colsPerPage }}×{{ pdfPlan.rowsPerPage }} 颗 · {{ pdfPlan.orientation === 'portrait' ? '纵向' : '横向' }}
           </p>
           <button
             type="button"
