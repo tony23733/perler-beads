@@ -1,10 +1,10 @@
 # 拼豆图纸生成器 — 设计文档
 
-> 状态：**第二阶段进行中** —— 第一阶段 MVP 已验收。
-> 已完成：限制颜色数量、抖动（Floyd–Steinberg / Bayer 有序）、网格行列坐标、背景处理（保留 / 透明 / 按颜色去除）、分页 A4 PDF 导出、工程保存/加载（IndexedDB）。
-> 下一步建议：**接入 PWA**（manifest + Service Worker，手机添加到主屏幕、离线可用）。
+> 状态：**第二阶段完成** —— 第一阶段 MVP 已验收，第二阶段规划功能全部完成。
+> 已完成：限制颜色数量、抖动、网格坐标、背景处理、分页 A4 PDF、工程保存/加载、手工编辑像素 + 撤销/重做、PWA（可安装 + 离线）。
+> 下一步建议：**部署上线（免费静态托管）+ 真机自测**，详见第 11 节。
 > 目标：把一张照片转换成 MARD 色号的拼豆像素图，并绘制可打印的网格图纸。
-> 定位：**第一阶段纯本地使用**（浏览器打开即用，无服务器、无 PWA）。功能成熟后再考虑部署与打包。
+> 定位：**纯本地使用**（图片不上传、无后端）；已接入 PWA，可部署到免费静态托管以获得 HTTPS + 离线 + 添加到主屏幕。
 
 ---
 
@@ -42,7 +42,7 @@
 | 重型计算 | Web Worker | 颜色匹配不阻塞界面 |
 | 颜色匹配 | CIELAB + CIEDE2000 色差 | 比 RGB 欧氏距离更接近人眼 |
 | 导出 | Canvas PNG / SVG / jsPDF | 图纸、清单、分页 A4 PDF（已完成） |
-| PWA | ~~vite-plugin-pwa~~ | **推迟到第二阶段** |
+| PWA | vite-plugin-pwa | 已完成：manifest + Service Worker，可安装、离线 |
 | 桌面封装 | ~~Tauri~~ | **推迟到第三阶段，可选** |
 
 **不使用**：Node/Python 后端、数据库、对象存储。图片不上传，全部本地计算。
@@ -91,9 +91,10 @@ npm run preview    # 本地预览打包结果
 - ✅ **工程保存 / 加载**：把全部设置 + 源图保存到 IndexedDB（源图以 Blob 存，无需 base64）。可命名保存（同名覆盖）、列表加载、删除；另有**导出/导入工程文件**（`.perler.json`，源图 base64 内嵌），可存到任意文件夹。设置带 `PROJECT_VERSION` 与 `normalizeSettings()` 容错，向后兼容。纯本地，无后端。
   - 注：IndexedDB 是**浏览器内部数据库**（在浏览器配置目录里，不是用户可浏览的普通文件），网页无法打开系统文件管理器；需要“文件”就用导出/导入。
 - ✅ **手工编辑像素 + 撤销/重做**：编辑模式支持**涂色 / 吸管 / 擦除**，在像素预览上点击/拖动修改；手工编辑作为**覆盖层**叠在算法结果上，预览/统计/导出统一用叠加后的网格。撤销/重做按「描边」为单位（命令栈），支持 Ctrl+Z / Ctrl+Shift+Z，编辑会随工程保存/加载。
+- ✅ **PWA**：`vite-plugin-pwa`（manifest + Service Worker + 自动更新 + 离线预缓存，含 jsPDF 分包）。图标由 `scripts/gen-icons.mjs` 生成（拼豆爱心，含 192/512/maskable/apple-touch）。Service Worker 需 HTTPS 或 localhost。
 
 **待做（建议顺序）**
-1. **接入 PWA**（manifest + Service Worker），手机「添加到主屏幕」、离线可用；此时需要 HTTPS 静态托管。← **下一步从这里开始**
+- （第二阶段规划项已全部完成）下一步就是 **部署上线 + 真机自测**，详见第 11 节。
 
 **暂缓（以后再说）**
 - ⏸️ **批量处理多张图**：用户决定暂时不做。
@@ -200,7 +201,13 @@ perler_beads/
 ├─ tsconfig.json
 ├─ .gitignore                   # 含 Snipaste_*.png（本地截图不提交）
 ├─ scripts/
-│  └─ gen-palette.mjs           # reference JSON → src/data/palettes/mard221.ts / mard291.ts
+│  ├─ gen-palette.mjs           # reference JSON → src/data/palettes/mard221.ts / mard291.ts
+│  └─ gen-icons.mjs             # 生成 PWA 图标（public/，纯 Node，无依赖）
+├─ public/                      # 静态资源（直接拷贝到 dist/）
+│  ├─ favicon.svg
+│  ├─ apple-touch-icon.png
+│  └─ icons/{icon-192,icon-512,icon-maskable-512}.png
+├─ pwa.config.ts                # PWA manifest（可单测）
 ├─ reference/                   # 只读外部参考数据（不参与打包）
 │  └─ pindou-color-data/        # HansBug/pindou-color-data (MIT)
 │     ├─ LICENSE / manifest.json
@@ -243,7 +250,7 @@ perler_beads/
 │     ├─ mard221.ts             # 生成：221 色
 │     ├─ mard291.ts             # 生成：291 色
 │     └─ index.ts               # 运行时封装（预计算 Lab、默认色卡）
-└─ tests/                       # 15 个文件 / 123 项（vitest）
+└─ tests/                       # 16 个文件 / 125 项（vitest）
 ```
 
 ---
@@ -322,10 +329,11 @@ interface ProjectSettings {
 npm install              # 首次
 npm run dev              # 开发，http://localhost:5173
 npm run dev -- --host    # 手机同局域网访问
-npm test                 # 123 项单元测试
+npm test                 # 125 项单元测试
 npm run typecheck        # vue-tsc 类型检查
-npm run build            # 生产构建（含类型检查）
+npm run build            # 生产构建（含类型检查，输出 dist/）
 npm run gen:palette      # 由 reference/ 重新生成色卡（一般不用跑）
+npm run gen:icons        # 重新生成 PWA 图标（一般不用跑）
 ```
 
 ### 10.2 关键约定 / 踩过的坑（务必先读）
@@ -344,10 +352,51 @@ npm run gen:palette      # 由 reference/ 重新生成色卡（一般不用跑�
 - **PDF 分页的标尺**：`planPdfTiles` 里预留了 `ruler = cellSize * 0.9`；分片渲染用 `renderGrid(..., viewport)`，行列号按全局编号。新增分页参数时记得同步两处的空间估算。
 - **工程存储**：源图以 `Blob` 存 IndexedDB（不要转 base64）；设置用 `normalizeSettings(raw, defaults)` 补齐/夹紧并带 `PROJECT_VERSION`，以后加字段时保持向后兼容。`projectStore` 的 `dbPromise` 有缓存，测试用 `_resetDbForTests()` + `fake-indexeddb/auto`。跨机器/归档用 **导出/导入 `.perler.json`**（源图 base64 内嵌）。网页无法打开系统文件管理器，不要再尝试“打开工程目录”。
 - **手工编辑是覆盖层**：`core/edit.ts` 的 `applyEdits(cells, edits)` 把「索引→色号|null」叠在算法结果上；**预览/统计/导出都必须用叠加后的 `gridCells`/`gridStats`**，不要再用 `result.cells`/`result.stats`。统计用 `statsFromCells`（直接数，不再匹配）。撤销/重做以「描边」为单位（`commitStroke`/`undo`/`redo`），网格尺寸变化或换图时清空历史。
+- **PWA / 部署**：Service Worker 需 HTTPS 或 localhost；`vite-plugin-pwa` 已配 `autoUpdate` + 预缓存（含 jsPDF 分包）。产物默认 `base: '/'`，**子路径部署（如 GitHub Pages）必须改 `base`** 后重建。图标用 `npm run gen:icons` 重新生成（`scripts/gen-icons.mjs` 是纯 Node PNG 编码，不依赖第三方）。
 - 色卡是**屏幕参考值**，界面/文档需保留「以实物色卡为准」提示。
 - `reference/` 为只读外部数据，不要改；改色卡请改 `scripts/gen-palette.mjs` 后重生成。
 - 本地截图 `Snipaste_*.png` 已被 `.gitignore` 忽略；不要 `git add -f` 强加。
 
 ### 10.3 下一步
 
-从 **接入 PWA** 开始（见 3.2）：加 manifest + Service Worker（可用 `vite-plugin-pwa`），实现「添加到主屏幕」与离线；注意 Service Worker 需要 HTTPS 或 localhost。
+从 **部署上线 + 真机自测** 开始（见第 11 节）；第二阶段规划项已全部完成。
+
+---
+
+## 11. 部署（PWA + 免费静态托管）
+
+### 11.1 构建产物
+
+```bash
+npm run build      # 输出 dist/：静态文件 + sw.js + manifest.webmanifest + icons/
+```
+
+`dist/` 是纯静态文件，**不需要任何后端**。PWA 的 Service Worker 需要 **HTTPS 或 localhost**，所以部署到提供 HTTPS 的静态托管即可满足。
+
+> 重要：默认 `base: '/'`，产物的 `index.html` 用绝对路径引用 `/assets/...`、`/manifest.webmanifest`。
+> - 部署在**域名根目录**（Vercel / Netlify / Cloudflare Pages / 自定义域名）：不用改。
+> - 部署在**子路径**（如 GitHub Pages 的 `/<repo>/`）：在 `vite.config.ts` 加 `base: '/<repo>/'` 后重新构建。
+
+### 11.2 一键静态托管（任选一个，均免费且自动 HTTPS）
+
+| 平台 | 做法 | 备注 |
+|---|---|---|
+| **Vercel** | 连 Git 仓库，Framework 选 Vite，Build `npm run build`，Output `dist` | 最省心，自动部署 |
+| **Netlify** | 连仓库（同上）或把 `dist/` 拖到 app.netlify.com/drop | 拖拽即上线 |
+| **Cloudflare Pages** | 连 Git，Build `npm run build`，输出目录 `dist` | 国内访问相对友好 |
+| **GitHub Pages** | 设 `base: '/<repo>/'`，把 `dist/` 发到 `gh-pages` 分支 | 需改 base |
+
+> 无需购买服务器，也无需数据库；这些平台都自带 HTTPS。
+
+### 11.3 手机安装
+
+- **Android（Chrome/Edge）**：打开网址 → 地址栏/菜单出现「安装应用」或「添加到主屏幕」→ 安装后是一个独立图标，全屏运行。**不需要 APK，也不上应用商店。**
+- **iOS（Safari）**：打开网址 → 分享 → 「添加到主屏幕」。iOS 不支持自动安装提示，必须手动添加。
+- iOS 的 PWA 能力略弱（无 `beforeinstallprompt`），但本应用的功能（含离线、IndexedDB 工程）均可正常使用。
+
+### 11.4 离线与更新
+
+- 首次打开后 Service Worker 会预缓存所有资源（含 jsPDF 分包），**断网也能用**（包括导出 PNG/PDF）。
+- `registerType: 'autoUpdate'`：部署新版本后，用户下次打开会自动更新缓存；无需手动清缓存。
+- 本地验证 PWA：`npm run build && npm run preview`，浏览器访问 `http://localhost:4173`，在 DevTools → Application 查看 Service Worker / Manifest / 安装按钮。
+
