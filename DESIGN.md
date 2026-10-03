@@ -232,7 +232,7 @@ perler_beads/
 │     ├─ mard221.ts             # 生成：221 色
 │     ├─ mard291.ts             # 生成：291 色
 │     └─ index.ts               # 运行时封装（预计算 Lab、默认色卡）
-└─ tests/                       # 10 个文件 / 90 项（vitest）
+└─ tests/                       # 11 个文件 / 92 项（vitest）
 ```
 
 ---
@@ -310,7 +310,7 @@ interface ProjectSettings {
 npm install              # 首次
 npm run dev              # 开发，http://localhost:5173
 npm run dev -- --host    # 手机同局域网访问
-npm test                 # 90 项单元测试
+npm test                 # 92 项单元测试
 npm run typecheck        # vue-tsc 类型检查
 npm run build            # 生产构建（含类型检查）
 npm run gen:palette      # 由 reference/ 重新生成色卡（一般不用跑）
@@ -325,6 +325,7 @@ npm run gen:palette      # 由 reference/ 重新生成色卡（一般不用跑�
 - **有序抖动**用「最近两色按比例」策略（`ratio = d1/(d1+d2)`），保证纯色区域不产生杂色；**不要**退回「固定幅度阈值扰动」写法。
 - **限色**用 palette-constrained k-means（`quantize.ts`），聚类用 Lab 欧氏距离（快），最终匹配用 CIEDE2000（准）。
 - **背景去除在源像素级完成**（`downsample`）：与 `removeColor` 距离在 `tolerance`（RGB 欧氏）内的源像素被剔除后求平均，避免边缘混色；`pixels` 是最终结果，`samples` 是未去除的原始平均色，专供界面拾色。改这块时不要图省事改成「先降采样再按色号剔除」。
+- **传给 Worker 的数据必须可结构化克隆**：Vue 的 `ref` 会把数组包成 Proxy，直接 `postMessage` 会报 `could not be cloned`。因此 `removeColor` 用 `shallowRef`，且 `pixelateClient.pixelate()` 会再转成普通数组。新增跨 Worker 参数时务必注意（`tests/pixelateClient.test.ts` 防回归）。
 - 色卡是**屏幕参考值**，界面/文档需保留「以实物色卡为准」提示。
 - `reference/` 为只读外部数据，不要改；改色卡请改 `scripts/gen-palette.mjs` 后重生成。
 - 本地截图 `Snipaste_*.png` 已被 `.gitignore` 忽略；不要 `git add -f` 强加。

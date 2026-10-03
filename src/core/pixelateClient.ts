@@ -79,6 +79,14 @@ export async function setSourceImage(imageData: ImageData): Promise<void> {
 /** 对已缓存的源图执行降采样 + 最近色匹配 */
 export function pixelate(opts: PixelateOptions): Promise<PixelateResponse> {
   const id = nextId++
-  const req: WorkerRequest = { type: 'pixelate', id, ...opts }
+  // removeColor 可能是 Vue 响应式代理（Proxy），不能被结构化克隆；
+  // 这里统一转成普通数字数组再发给 Worker。
+  const { removeColor, ...rest } = opts
+  const req: WorkerRequest = {
+    type: 'pixelate',
+    id,
+    ...rest,
+    removeColor: removeColor ? [removeColor[0], removeColor[1], removeColor[2]] : undefined,
+  }
   return send<PixelateResponse>(req)
 }

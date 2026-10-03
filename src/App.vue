@@ -34,7 +34,7 @@ const aspect = ref(1)
 
 const paletteId = ref<string>(DEFAULT_PALETTE_ID)
 const background = ref<BackgroundMode>('keep')
-const removeColor = ref<RGB | null>(null)
+const removeColor = shallowRef<RGB | null>(null)
 const tolerance = ref(30)
 const picking = ref(false)
 const maxColors = ref(0)
@@ -75,7 +75,7 @@ async function run() {
       targetWidth: targetWidth.value,
       targetHeight: targetHeight.value,
       background: background.value,
-      removeColor: removeColor.value ?? undefined,
+      removeColor: removeColor.value ? [...removeColor.value] : undefined,
       tolerance: tolerance.value,
       maxColors: maxColors.value || undefined,
       dither: dither.value,
