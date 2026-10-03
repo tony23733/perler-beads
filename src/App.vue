@@ -64,12 +64,23 @@ const removeColorText = computed(() =>
 
 const clampSide = (v: number) => Math.max(1, Math.min(MAX_SIDE, Math.round(v)))
 
-let runToken = 0
+let running = false
+let queued = false
+let disposed = false
 let timer: ReturnType<typeof setTimeout> | undefined
 
+/**
+ * 执行一次像素化。
+ * 如果已有任务在跑，不并发发出，而是标记 queued；当前任务结束时会用**最新**参数再跑一次。
+ * 这样拖动滑块时始终只保留最新一次计算，不会堆积请求。
+ */
 async function run() {
-  if (!sourceReady.value) return
-  const token = ++runToken
+  if (disposed || !sourceReady.value) return
+  if (running) {
+    queued = true
+    return
+  }
+  running = true
   busy.value = true
   error.value = null
   try {
@@ -85,19 +96,30 @@ async function run() {
       ditherStrength: ditherStrength.value,
       palette: palette.value,
     })
-    if (token !== runToken) return
     result.value = res
   } catch (e) {
-    if (token !== runToken) return
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
-    if (token === runToken) busy.value = false
+    running = false
+    if (queued && !disposed) {
+      queued = false
+      void run()
+    } else {
+      busy.value = false
+    }
   }
 }
 
+/** 结构性改动（尺寸/色卡/模式等）：稍作防抖，避免连续触发 */
 function scheduleRun() {
   clearTimeout(timer)
-  timer = setTimeout(run, 150)
+  timer = setTimeout(run, 120)
+}
+
+/** 实时控件（容差/边缘阈值/抖动强度）：立即请求，由 run() 内部合并 */
+function requestRun() {
+  clearTimeout(timer)
+  void run()
 }
 
 async function onSelectFile(file: File) {
@@ -155,11 +177,14 @@ function autoPickBackground() {
 }
 
 watch(
-  [targetWidth, targetHeight, paletteId, background, maxColors, dither, ditherStrength, removeColor, tolerance, minCoverage],
+  [targetWidth, targetHeight, paletteId, background, maxColors, dither, removeColor],
   scheduleRun,
 )
+// 实时：拖动这些滑块时尽快刷新预览
+watch([tolerance, minCoverage, ditherStrength], requestRun)
 
 onUnmounted(() => {
+  disposed = true
   clearTimeout(timer)
   if (sourceUrl.value) URL.revokeObjectURL(sourceUrl.value)
 })
