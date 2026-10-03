@@ -1,8 +1,8 @@
 # 拼豆图纸生成器 — 设计文档
 
-> 状态：**第二阶段进行中（暂存，明天继续）** —— 第一阶段 MVP 已验收。
-> 已完成：限制颜色数量、抖动（Floyd–Steinberg / Bayer 有序）、网格行列坐标。
-> 下一步建议：**背景处理** → 分页 A4 PDF → 保存/加载工程 → 撤销/重做 → PWA。
+> 状态：**第二阶段进行中** —— 第一阶段 MVP 已验收。
+> 已完成：限制颜色数量、抖动（Floyd–Steinberg / Bayer 有序）、网格行列坐标、背景处理（保留 / 透明 / 按颜色去除）。
+> 下一步建议：**分页 A4 PDF** → 保存/加载工程 → 撤销/重做 → PWA。
 > 目标：把一张照片转换成 MARD 色号的拼豆像素图，并绘制可打印的网格图纸。
 > 定位：**第一阶段纯本地使用**（浏览器打开即用，无服务器、无 PWA）。功能成熟后再考虑部署与打包。
 
@@ -82,13 +82,13 @@ npm run preview    # 本地预览打包结果
 - ✅ **限制使用颜色数量**（8/12/16/20/24/32 色），用 palette-constrained k-means 自动选最合适的子集。
 - ✅ **抖动**：Floyd–Steinberg 误差扩散 / Bayer 有序抖动（在两最近色卡色间按比例抖动，纯色区域不产生杂色），可选，且在选定 N 色内抖动。
 - ✅ **网格坐标标注**（行/列号，从 1 开始）。
+- ✅ **背景处理**：保留背景 / 透明背景 / 按颜色去除。去除模式支持在像素预览里点选背景色、自动取四角、容差调节；在**源像素级**剔除背景后再做区域平均，避免边缘混色；去掉的格子不放豆子、也不参与限色与统计。
 
 **待做（建议顺序）**
-1. **背景处理**：手动去背景（点选背景色 + 容差 / 自动取四角色），去掉的颜色不参与配色。← **下一步从这里开始**
-2. **图纸分页导出 A4 PDF**：每页带页码与拼接定位标记。
-3. **保存/加载工程文件**（本地 JSON 或 IndexedDB）。
-4. **撤销/重做**（需要先有手工编辑像素才有意义）。
-5. **接入 PWA**（manifest + Service Worker），手机「添加到主屏幕」、离线可用；此时需要 HTTPS 静态托管。
+1. **图纸分页导出 A4 PDF**：每页带页码与拼接定位标记。← **下一步从这里开始**
+2. **保存/加载工程文件**（本地 JSON 或 IndexedDB）。
+3. **撤销/重做**（需要先有手工编辑像素才有意义）。
+4. **接入 PWA**（manifest + Service Worker），手机「添加到主屏幕」、离线可用；此时需要 HTTPS 静态托管。
 
 **暂缓（以后再说）**
 - ⏸️ **批量处理多张图**：用户决定暂时不做。
@@ -218,7 +218,7 @@ perler_beads/
 │  │  └─ ExportPanel.vue        # PNG/CSV 导出
 │  ├─ core/                     # 纯逻辑，可在 Node 下单测
 │  │  ├─ color.ts               # sRGB↔Lab、CIEDE2000
-│  │  ├─ pixelate.ts            # 降采样取样（保留/透明背景）
+│  │  ├─ pixelate.ts            # 降采样取样（保留 / 透明 / 按色去除）
 │  │  ├─ matcher.ts             # 最近色匹配 nearest / nearest2 + 统计
 │  │  ├─ quantize.ts            # 限制颜色数量（palette-constrained k-means）
 │  │  ├─ dither.ts              # Floyd–Steinberg / Bayer 有序抖动
@@ -232,7 +232,7 @@ perler_beads/
 │     ├─ mard221.ts             # 生成：221 色
 │     ├─ mard291.ts             # 生成：291 色
 │     └─ index.ts               # 运行时封装（预计算 Lab、默认色卡）
-└─ tests/                       # 10 个文件 / 85 项（vitest）
+└─ tests/                       # 10 个文件 / 90 项（vitest）
 ```
 
 ---
@@ -281,8 +281,8 @@ interface ProjectSettings {
    - ~~限制使用颜色数量~~ ✅
    - ~~抖动~~ ✅
    - ~~网格坐标标注~~ ✅（随网格图纸完成）
-   - **背景处理** ← 下一步
-   - 分页 A4 PDF
+   - ~~背景处理~~ ✅（保留 / 透明 / 按颜色去除；源像素级去背景 + 预览拾色 + 自动取四角 + 容差）
+   - **分页 A4 PDF** ← 下一步
    - 保存/加载工程
    - 撤销/重做
    - 批量处理 —— ⏸️ **暂缓（以后再说）**
@@ -310,7 +310,7 @@ interface ProjectSettings {
 npm install              # 首次
 npm run dev              # 开发，http://localhost:5173
 npm run dev -- --host    # 手机同局域网访问
-npm test                 # 85 项单元测试
+npm test                 # 90 项单元测试
 npm run typecheck        # vue-tsc 类型检查
 npm run build            # 生产构建（含类型检查）
 npm run gen:palette      # 由 reference/ 重新生成色卡（一般不用跑）
@@ -324,10 +324,11 @@ npm run gen:palette      # 由 reference/ 重新生成色卡（一般不用跑�
 - **CIEDE2000 大色差特性**：在缺少灰阶的色卡上，中灰可能匹配到同亮度饱和色（与参考库 `delta-e` 逐位一致，非 bug）；真实 MARD 含完整灰阶无此问题。`tests/deltaE.reference.test.ts` 持续校验。
 - **有序抖动**用「最近两色按比例」策略（`ratio = d1/(d1+d2)`），保证纯色区域不产生杂色；**不要**退回「固定幅度阈值扰动」写法。
 - **限色**用 palette-constrained k-means（`quantize.ts`），聚类用 Lab 欧氏距离（快），最终匹配用 CIEDE2000（准）。
+- **背景去除在源像素级完成**（`downsample`）：与 `removeColor` 距离在 `tolerance`（RGB 欧氏）内的源像素被剔除后求平均，避免边缘混色；`pixels` 是最终结果，`samples` 是未去除的原始平均色，专供界面拾色。改这块时不要图省事改成「先降采样再按色号剔除」。
 - 色卡是**屏幕参考值**，界面/文档需保留「以实物色卡为准」提示。
 - `reference/` 为只读外部数据，不要改；改色卡请改 `scripts/gen-palette.mjs` 后重生成。
 - 本地截图 `Snipaste_*.png` 已被 `.gitignore` 忽略；不要 `git add -f` 强加。
 
 ### 10.3 下一步
 
-从 **背景处理** 开始（见 3.2）：在现有「保留 / 透明」基础上增加「按颜色去除」——点选背景色 + 容差（或自动取四角色），去除的颜色不参与配色。涉及 `core/pixelate.ts`、worker 请求参数与界面。
+从 **分页 A4 PDF** 开始（见 3.2）：把整张网格图纸按 A4 纸切页导出，每页带页码与拼接定位标记。可复用 `core/grid.ts` 的 `renderGrid`，新增 `core/pdf.ts`（jsPDF）或分块渲染后逐页导出。涉及 `core/exporter.ts`、`ExportPanel` 与依赖（新增 jsPDF）。

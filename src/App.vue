@@ -12,8 +12,9 @@ import { DEFAULT_GRID_OPTIONS } from './core/grid'
 import type { GridRenderOptions } from './core/grid'
 import { loadImageData } from './core/image'
 import { pixelate, setSourceImage } from './core/pixelateClient'
+import { guessBackgroundFromCorners } from './core/pixelate'
 import type { BackgroundMode } from './core/pixelate'
-import type { DitherMode } from './types'
+import type { DitherMode, RGB } from './types'
 import { DEFAULT_PALETTE_ID, getPalette, PALETTES } from './data/palettes'
 import type { PixelateResponse } from './workers/pixelate.worker'
 
@@ -33,6 +34,9 @@ const aspect = ref(1)
 
 const paletteId = ref<string>(DEFAULT_PALETTE_ID)
 const background = ref<BackgroundMode>('keep')
+const removeColor = ref<RGB | null>(null)
+const tolerance = ref(30)
+const picking = ref(false)
 const maxColors = ref(0)
 const dither = ref<DitherMode>('none')
 const ditherStrength = ref(1)
@@ -49,6 +53,13 @@ const gridOptions = ref<GridRenderOptions>({ ...DEFAULT_GRID_OPTIONS })
 const palette = computed(() => getPalette(paletteId.value))
 const hasSource = computed(() => sourceUrl.value !== null)
 
+const toHex = (rgb: RGB) =>
+  '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase()
+const removeColorHex = computed(() => (removeColor.value ? toHex(removeColor.value) : null))
+const removeColorText = computed(() =>
+  removeColor.value ? `${toHex(removeColor.value)}（${removeColor.value.join(', ')}）` : '未选择',
+)
+
 const clampSide = (v: number) => Math.max(1, Math.min(MAX_SIDE, Math.round(v)))
 
 let runToken = 0
@@ -64,6 +75,8 @@ async function run() {
       targetWidth: targetWidth.value,
       targetHeight: targetHeight.value,
       background: background.value,
+      removeColor: removeColor.value ?? undefined,
+      tolerance: tolerance.value,
       maxColors: maxColors.value || undefined,
       dither: dither.value,
       ditherStrength: ditherStrength.value,
@@ -122,7 +135,25 @@ function onHeight(value: number) {
   if (locked.value && aspect.value > 0) targetWidth.value = clampSide(value * aspect.value)
 }
 
-watch([targetWidth, targetHeight, paletteId, background, maxColors, dither, ditherStrength], scheduleRun)
+function onPick(color: RGB) {
+  removeColor.value = color
+  picking.value = false
+}
+
+function autoPickBackground() {
+  const res = result.value
+  if (!res) return
+  const color = guessBackgroundFromCorners(res.samples, res.width, res.height)
+  if (color) {
+    removeColor.value = color
+    picking.value = false
+  }
+}
+
+watch(
+  [targetWidth, targetHeight, paletteId, background, maxColors, dither, ditherStrength, removeColor, tolerance],
+  scheduleRun,
+)
 
 onUnmounted(() => {
   clearTimeout(timer)
@@ -213,7 +244,7 @@ onUnmounted(() => {
               <div class="flex gap-2">
                 <button
                   type="button"
-                  class="flex-1 rounded-lg border px-3 py-2 text-sm transition"
+                  class="flex-1 rounded-lg border px-2 py-2 text-xs transition"
                   :class="background === 'keep' ? 'border-indigo-400 bg-indigo-50 text-indigo-600' : 'border-slate-300 text-slate-500'"
                   @click="background = 'keep'"
                 >
@@ -221,12 +252,69 @@ onUnmounted(() => {
                 </button>
                 <button
                   type="button"
-                  class="flex-1 rounded-lg border px-3 py-2 text-sm transition"
+                  class="flex-1 rounded-lg border px-2 py-2 text-xs transition"
                   :class="background === 'transparent' ? 'border-indigo-400 bg-indigo-50 text-indigo-600' : 'border-slate-300 text-slate-500'"
                   @click="background = 'transparent'"
                 >
                   透明背景
                 </button>
+                <button
+                  type="button"
+                  class="flex-1 rounded-lg border px-2 py-2 text-xs transition"
+                  :class="background === 'remove' ? 'border-indigo-400 bg-indigo-50 text-indigo-600' : 'border-slate-300 text-slate-500'"
+                  @click="background = 'remove'"
+                >
+                  去除背景
+                </button>
+              </div>
+
+              <div
+                v-if="background === 'remove'"
+                class="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3"
+              >
+                <div class="flex items-center gap-2">
+                  <span
+                    class="h-6 w-6 shrink-0 rounded border border-slate-300"
+                    :style="{ backgroundColor: removeColorHex ?? '#ffffff' }"
+                  />
+                  <span class="truncate text-xs text-slate-600">{{ removeColorText }}</span>
+                </div>
+                <label class="block">
+                  <span class="mb-1 flex items-center justify-between text-xs text-slate-500">
+                    <span>容差</span>
+                    <span>{{ tolerance }}</span>
+                  </span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    :value="tolerance"
+                    class="w-full accent-indigo-500"
+                    @input="tolerance = Number(($event.target as HTMLInputElement).value)"
+                  />
+                </label>
+                <div class="flex gap-2">
+                  <button
+                    type="button"
+                    class="flex-1 rounded-lg border px-2 py-1.5 text-xs transition"
+                    :class="picking ? 'border-indigo-400 bg-indigo-50 text-indigo-600' : 'border-slate-300 text-slate-600'"
+                    @click="picking = !picking; viewMode = 'pixel'"
+                  >
+                    {{ picking ? '点击预览拾取…' : '拾取背景色' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-600 transition"
+                    :disabled="!result"
+                    @click="autoPickBackground"
+                  >
+                    自动取四角
+                  </button>
+                </div>
+                <p class="text-[11px] leading-4 text-slate-400">
+                  与背景色相近的豆子会被去掉（不放豆子），且不参与配色统计。
+                </p>
               </div>
             </div>
           </div>
@@ -281,6 +369,9 @@ onUnmounted(() => {
                 :width="result.width"
                 :height="result.height"
                 :palette="palette"
+                :samples="result.samples"
+                :pick-mode="picking"
+                @pick="onPick"
               />
               <GridPreview
                 v-else

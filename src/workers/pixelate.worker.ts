@@ -9,7 +9,7 @@ import { createMatcher } from '../core/matcher'
 import type { MatchStats } from '../core/matcher'
 import { matchPixelsDither } from '../core/dither'
 import { selectPaletteColors } from '../core/quantize'
-import type { DitherMode, Palette } from '../types'
+import type { DitherMode, Palette, RGB } from '../types'
 
 export interface SetImageRequest {
   type: 'setImage'
@@ -26,6 +26,10 @@ export interface PixelateRequest {
   targetWidth: number
   targetHeight: number
   background: BackgroundMode
+  /** remove 模式下去除的背景色 */
+  removeColor?: RGB
+  /** remove 模式的颜色容差（RGB 欧氏距离） */
+  tolerance?: number
   /** 限制使用的颜色数量；0 / 未设为不限制 */
   maxColors?: number
   /** 抖动模式 */
@@ -48,6 +52,8 @@ export interface PixelateResponse {
   width: number
   height: number
   cells: (string | null)[]
+  /** 降采样后的原始平均色（未做背景去除），供界面拾色 */
+  samples: (RGB | null)[]
   stats: MatchStats[]
   /** 出错时携带错误信息 */
   error?: string
@@ -80,10 +86,12 @@ ctx.onmessage = (e: MessageEvent<WorkerRequest>) => {
 
   try {
     if (!source) throw new Error('尚未设置源图')
-    const { width, height, pixels } = downsample(source, {
+    const { width, height, pixels, samples } = downsample(source, {
       targetWidth: req.targetWidth,
       targetHeight: req.targetHeight,
       background: req.background,
+      removeColor: req.removeColor,
+      tolerance: req.tolerance,
     })
     const activePalette =
       req.maxColors && req.maxColors > 0 && req.maxColors < req.palette.colors.length
@@ -104,6 +112,7 @@ ctx.onmessage = (e: MessageEvent<WorkerRequest>) => {
       width,
       height,
       cells,
+      samples,
       stats,
     } satisfies PixelateResponse)
   } catch (err) {
@@ -113,6 +122,7 @@ ctx.onmessage = (e: MessageEvent<WorkerRequest>) => {
       width: 0,
       height: 0,
       cells: [],
+      samples: [],
       stats: [],
       error: err instanceof Error ? err.message : String(err),
     } satisfies PixelateResponse)

@@ -53,6 +53,10 @@ export interface ProjectSettings {
   targetHeight: number
   maxColors?: number
   dither: DitherMode
-  background: 'keep' | 'transparent'
+  background: 'keep' | 'transparent' | 'remove'
+  /** remove 模式下去除的背景色 */
+  removeColor?: RGB
+  /** remove 模式的颜色容差（RGB 欧氏距离） */
+  tolerance?: number
   paletteId: string
 }

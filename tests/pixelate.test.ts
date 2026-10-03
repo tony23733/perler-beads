@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { downsample } from '../src/core/pixelate'
+import { downsample, guessBackgroundFromCorners } from '../src/core/pixelate'
 import type { RgbaImage } from '../src/core/pixelate'
 import type { RGB } from '../src/types'
 
@@ -128,5 +128,74 @@ describe('downsample', () => {
     })
     expect(width).toBe(1)
     expect(height).toBe(1)
+  })
+
+  it('去除背景：纯背景格 → 空格，samples 保留原始色', () => {
+    const src = makeImage(2, 1, [
+      [255, 0, 0],
+      [255, 255, 255],
+    ])
+    const { pixels, samples } = downsample(src, {
+      targetWidth: 2,
+      targetHeight: 1,
+      background: 'remove',
+      removeColor: [255, 255, 255],
+      tolerance: 10,
+    })
+    expect(pixels).toEqual([[255, 0, 0], null])
+    expect(samples).toEqual([
+      [255, 0, 0],
+      [255, 255, 255],
+    ])
+  })
+
+  it('去除背景在源像素级完成：边缘不混入背景色', () => {
+    const src = makeImage(2, 2, [
+      [255, 0, 0],
+      [255, 255, 255],
+      [255, 255, 255],
+      [255, 255, 255],
+    ])
+    const { pixels, samples } = downsample(src, {
+      targetWidth: 1,
+      targetHeight: 1,
+      background: 'remove',
+      removeColor: [255, 255, 255],
+      tolerance: 10,
+    })
+    // 前景平均应为纯红，而不是红+白的混合
+    expect(pixels).toEqual([[255, 0, 0]])
+    // 原始平均仍保留混合结果，供拾色
+    expect(samples).toEqual([[255, 191, 191]])
+  })
+
+  it('去除背景但未指定颜色时退化为保留背景', () => {
+    const src = makeImage(1, 1, [[10, 20, 30]])
+    const { pixels } = downsample(src, {
+      targetWidth: 1,
+      targetHeight: 1,
+      background: 'remove',
+    })
+    expect(pixels).toEqual([[10, 20, 30]])
+  })
+})
+
+describe('guessBackgroundFromCorners', () => {
+  it('返回四角中占多数的一簇平均色', () => {
+    const samples: (RGB | null)[] = [
+      [250, 250, 250],
+      [248, 249, 251],
+      [252, 250, 249],
+      [10, 20, 30],
+    ]
+    const bg = guessBackgroundFromCorners(samples, 2, 2, 20)
+    expect(bg).not.toBeNull()
+    expect(bg![0]).toBeGreaterThan(240)
+    expect(bg![1]).toBeGreaterThan(240)
+    expect(bg![2]).toBeGreaterThan(240)
+  })
+
+  it('四角全透明时返回 null', () => {
+    expect(guessBackgroundFromCorners([null, null, null, null], 2, 2)).toBeNull()
   })
 })
