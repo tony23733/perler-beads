@@ -156,4 +156,19 @@ describe('renderGrid', () => {
     expect(calls.filter((c) => c.op === 'stroke')).toHaveLength(2)
     expect(calls.filter((c) => c.op === 'strokeRect')).toHaveLength(1)
   })
+
+  it('视口分片：只画子区域，坐标按全局编号', () => {
+    const { ctx, calls } = mockContext()
+    const size = renderGrid(ctx, grid, MARD_221, { cellSize: 20, display: 'color' }, {
+      offsetCol: 1,
+      offsetRow: 0,
+      cols: 2,
+      rows: 2,
+    })
+    expect(size.width).toBe(20 + 2 * 20)
+    expect(size.height).toBe(20 + 2 * 20)
+    const labels = calls.filter((c) => c.op === 'fillText').map((c) => c.args[0])
+    // 列全局编号 2、3；行 1、2
+    expect(labels).toEqual(['2', '3', '1', '2'])
+  })
 })

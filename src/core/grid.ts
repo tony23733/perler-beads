@@ -103,17 +103,34 @@ export function measureGrid(
 }
 
 /**
+ * 网格分片（视图区域）：用于分页导出时只渲染整张网格的一部分。
+ * 坐标均从 0 开始；行/列号会按全局位置标注，方便跨页拼接。
+ */
+export interface GridViewport {
+  offsetCol: number
+  offsetRow: number
+  cols: number
+  rows: number
+}
+
+/**
  * 把网格绘制到 2D 上下文，返回画布尺寸。
  * 调用方需先用 measureGrid 设置好画布尺寸。
+ * 传入 viewport 时只渲染该子区域（分页用），行列坐标仍按全局编号。
  */
 export function renderGrid(
   ctx: Grid2DContext,
   grid: BeadGrid,
   palette: Palette,
   options: Partial<GridRenderOptions> = {},
+  viewport?: GridViewport,
 ): { width: number; height: number } {
   const opt: GridRenderOptions = { ...DEFAULT_GRID_OPTIONS, ...options }
-  const { width: cols, height: rows, cells } = grid
+  const { cells } = grid
+  const offsetCol = viewport?.offsetCol ?? 0
+  const offsetRow = viewport?.offsetRow ?? 0
+  const cols = viewport?.cols ?? grid.width
+  const rows = viewport?.rows ?? grid.height
   const layout = computeLayout(cols, rows, opt)
   const { cellSize, ruler, originX, originY, width: totalW, height: totalH } = layout
 
@@ -133,7 +150,7 @@ export function renderGrid(
 
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
-      const id = cells[y * cols + x]
+      const id = cells[(offsetRow + y) * grid.width + (offsetCol + x)]
       const px = originX + x * cellSize
       const py = originY + y * cellSize
       const hex = id ? (colorMap.get(id) ?? '#cccccc') : null
@@ -166,18 +183,20 @@ export function renderGrid(
     ctx.stroke()
   }
 
-  // 粗线（每 majorEvery 格）
+  // 粗线（每 majorEvery 格，按全局索引定位）
   if (opt.majorEvery > 0) {
     ctx.lineWidth = 2
     ctx.strokeStyle = '#64748b'
     ctx.beginPath()
-    for (let x = opt.majorEvery; x <= cols; x += opt.majorEvery) {
-      const px = originX + x * cellSize
+    const firstCol = Math.ceil(offsetCol / opt.majorEvery) * opt.majorEvery
+    for (let g = firstCol; g <= offsetCol + cols; g += opt.majorEvery) {
+      const px = originX + (g - offsetCol) * cellSize
       ctx.moveTo(px, originY)
       ctx.lineTo(px, originY + rows * cellSize)
     }
-    for (let y = opt.majorEvery; y <= rows; y += opt.majorEvery) {
-      const py = originY + y * cellSize
+    const firstRow = Math.ceil(offsetRow / opt.majorEvery) * opt.majorEvery
+    for (let g = firstRow; g <= offsetRow + rows; g += opt.majorEvery) {
+      const py = originY + (g - offsetRow) * cellSize
       ctx.moveTo(originX, py)
       ctx.lineTo(originX + cols * cellSize, py)
     }
@@ -189,17 +208,17 @@ export function renderGrid(
   ctx.strokeStyle = '#334155'
   ctx.strokeRect(originX, originY, cols * cellSize, rows * cellSize)
 
-  // 行列坐标
+  // 行列坐标（全局编号，从 1 开始）
   if (opt.showCoordinates) {
     ctx.fillStyle = '#475569'
     ctx.font = `${Math.max(8, Math.round(ruler * 0.42))}px sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     for (let x = 0; x < cols; x++) {
-      ctx.fillText(String(x + 1), originX + x * cellSize + cellSize / 2, ruler / 2)
+      ctx.fillText(String(offsetCol + x + 1), originX + x * cellSize + cellSize / 2, ruler / 2)
     }
     for (let y = 0; y < rows; y++) {
-      ctx.fillText(String(y + 1), ruler / 2, originY + y * cellSize + cellSize / 2)
+      ctx.fillText(String(offsetRow + y + 1), ruler / 2, originY + y * cellSize + cellSize / 2)
     }
   }
 

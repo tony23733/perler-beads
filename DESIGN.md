@@ -1,8 +1,8 @@
 # 拼豆图纸生成器 — 设计文档
 
 > 状态：**第二阶段进行中** —— 第一阶段 MVP 已验收。
-> 已完成：限制颜色数量、抖动（Floyd–Steinberg / Bayer 有序）、网格行列坐标、背景处理（保留 / 透明 / 按颜色去除）。
-> 下一步建议：**分页 A4 PDF** → 保存/加载工程 → 撤销/重做 → PWA。
+> 已完成：限制颜色数量、抖动（Floyd–Steinberg / Bayer 有序）、网格行列坐标、背景处理（保留 / 透明 / 按颜色去除）、分页 A4 PDF 导出。
+> 下一步建议：**保存/加载工程** → 撤销/重做 → PWA。
 > 目标：把一张照片转换成 MARD 色号的拼豆像素图，并绘制可打印的网格图纸。
 > 定位：**第一阶段纯本地使用**（浏览器打开即用，无服务器、无 PWA）。功能成熟后再考虑部署与打包。
 
@@ -41,7 +41,7 @@
 | 图像处理 | Canvas 2D API | 读取像素、缩放、生成图 |
 | 重型计算 | Web Worker | 颜色匹配不阻塞界面 |
 | 颜色匹配 | CIELAB + CIEDE2000 色差 | 比 RGB 欧氏距离更接近人眼 |
-| 导出 | Canvas PNG / SVG / jsPDF | 图纸、清单（PDF 属第二阶段） |
+| 导出 | Canvas PNG / SVG / jsPDF | 图纸、清单、分页 A4 PDF（已完成） |
 | PWA | ~~vite-plugin-pwa~~ | **推迟到第二阶段** |
 | 桌面封装 | ~~Tauri~~ | **推迟到第三阶段，可选** |
 
@@ -88,10 +88,12 @@ npm run preview    # 本地预览打包结果
   - 「按颜色去除」：在像素预览里点选背景色、自动取四角、容差调节，外加**边缘阈值**（前景占比低于该值的格子视为背景，清掉零星残留）；在**源像素级**剔除背景后再做区域平均，避免边缘混色；去掉的格子不放豆子、也不参与限色与统计。
 
 **待做（建议顺序）**
-1. **图纸分页导出 A4 PDF**：每页带页码与拼接定位标记。← **下一步从这里开始**
-2. **保存/加载工程文件**（本地 JSON 或 IndexedDB）。
-3. **撤销/重做**（需要先有手工编辑像素才有意义）。
-4. **接入 PWA**（manifest + Service Worker），手机「添加到主屏幕」、离线可用；此时需要 HTTPS 静态托管。
+- ✅ **分页 A4 PDF 导出**：把整张网格按每格 N mm 切页（4/5/6/8mm），自动或手动选择纵向/横向（默认选页数最少的方向）；每页带标题、全局行列范围、页码、四角拼接定位角标与页脚；可选附带用色清单页。分片渲染复用 `renderGrid` 的**视口（viewport）**能力，行列坐标按全局编号。PDF 文案用 ASCII（jsPDF 内置字体不含中文）。
+
+**待做（建议顺序）**
+1. **保存/加载工程文件**（本地 JSON 或 IndexedDB）。← **下一步从这里开始**
+2. **撤销/重做**（需要先有手工编辑像素才有意义）。
+3. **接入 PWA**（manifest + Service Worker），手机「添加到主屏幕」、离线可用；此时需要 HTTPS 静态托管。
 
 **暂缓（以后再说）**
 - ⏸️ **批量处理多张图**：用户决定暂时不做。
@@ -227,6 +229,7 @@ perler_beads/
 │  │  ├─ dither.ts              # Floyd–Steinberg / Bayer 有序抖动
 │  │  ├─ grid.ts                # 网格图纸渲染（可测的 2D 上下文接口）
 │  │  ├─ exporter.ts            # PNG（含用色清单）/ CSV 导出
+│  │  ├─ pdf.ts                # A4 分页规划 + jsPDF 导出（分片用 grid 视口）
 │  │  ├─ image.ts               # 文件 → ImageData
 │  │  └─ pixelateClient.ts      # Worker 客户端（共享 worker + id 对应并发）
 │  ├─ workers/
@@ -235,7 +238,7 @@ perler_beads/
 │     ├─ mard221.ts             # 生成：221 色
 │     ├─ mard291.ts             # 生成：291 色
 │     └─ index.ts               # 运行时封装（预计算 Lab、默认色卡）
-└─ tests/                       # 12 个文件 / 95 项（vitest）
+└─ tests/                       # 13 个文件 / 103 项（vitest）
 ```
 
 ---
@@ -285,7 +288,8 @@ interface ProjectSettings {
    - ~~抖动~~ ✅
    - ~~网格坐标标注~~ ✅（随网格图纸完成）
    - ~~背景处理~~ ✅（保留 / 透明 / 按颜色去除；源像素级去背景 + 预览拾色 + 自动取四角 + 容差 + 边缘阈值）
-   - **分页 A4 PDF** ← 下一步
+   - ~~分页 A4 PDF~~ ✅（`core/pdf.ts` + `ExportPanel`；4/5/6/8mm 每格，自动纵向/横向，页码 + 全局行列范围 + 四角拼接角标，可选清单页；jsPDF 动态 import 代码分包）
+   - **保存/加载工程** ← 下一步
    - 保存/加载工程
    - 撤销/重做
    - 批量处理 —— ⏸️ **暂缓（以后再说）**
@@ -313,7 +317,7 @@ interface ProjectSettings {
 npm install              # 首次
 npm run dev              # 开发，http://localhost:5173
 npm run dev -- --host    # 手机同局域网访问
-npm test                 # 95 项单元测试
+npm test                 # 103 项单元测试
 npm run typecheck        # vue-tsc 类型检查
 npm run build            # 生产构建（含类型检查）
 npm run gen:palette      # 由 reference/ 重新生成色卡（一般不用跑）
@@ -331,10 +335,12 @@ npm run gen:palette      # 由 reference/ 重新生成色卡（一般不用跑�
 - **「保留背景」与「透明背景」对不透明照片完全等价**：前者与白底合成、后者按 alpha 判空，而普通照片 alpha 全为 255，故看起来一样。`hasTransparency()` 检测到无 alpha 时会禁用「透明背景」按钮（在把 ImageData 交给 Worker 前调用，因为 buffer 会被 transfer）。
 - **传给 Worker 的数据必须可结构化克隆**：Vue 的 `ref` 会把数组包成 Proxy，直接 `postMessage` 会报 `could not be cloned`。因此 `removeColor` 用 `shallowRef`，且 `pixelateClient.pixelate()` 会再转成普通数组。新增跨 Worker 参数时务必注意（`tests/pixelateClient.test.ts` 防回归）。
 - **实时控件与合并策略**：容差 / 边缘阈值 / 抖动强度默认走 `requestRun()` 立即触发（拖动实时刷新），可通过预览区右上角的「实时预览」开关关闭，关闭后改走 120ms 防抖。尺寸 / 色卡 / 模式等始终用 `scheduleRun()`。`run()` 内部用 `running`/`queued` 保证同一时刻只跑一个任务，结束后再用**最新**参数补跑一次，因此拖动滑块不会堆积请求（`busy` 会在队列排空后才消失）。不要改回单纯的 `watch` 防抖，否则又会变成「停下来才更新」。
+- **PDF 中文问题**：jsPDF 内置 Helvetica 不含中文字形，PDF 内的标题/页码/表头一律用 ASCII（如 `Page 1/4`、`Cols 1-30`），不要写中文，否则乱码或报错。
+- **PDF 分页的标尺**：`planPdfTiles` 里预留了 `ruler = cellSize * 0.9`；分片渲染用 `renderGrid(..., viewport)`，行列号按全局编号。新增分页参数时记得同步两处的空间估算。
 - 色卡是**屏幕参考值**，界面/文档需保留「以实物色卡为准」提示。
 - `reference/` 为只读外部数据，不要改；改色卡请改 `scripts/gen-palette.mjs` 后重生成。
 - 本地截图 `Snipaste_*.png` 已被 `.gitignore` 忽略；不要 `git add -f` 强加。
 
 ### 10.3 下一步
 
-从 **分页 A4 PDF** 开始（见 3.2）：把整张网格图纸按 A4 纸切页导出，每页带页码与拼接定位标记。可复用 `core/grid.ts` 的 `renderGrid`，新增 `core/pdf.ts`（jsPDF）或分块渲染后逐页导出。涉及 `core/exporter.ts`、`ExportPanel` 与依赖（新增 jsPDF）。
+从 **保存/加载工程** 开始（见 3.2）：把当前的所有设置与源图/网格保存到本地（JSON 或 IndexedDB），下次可原样恢复。注意源图可能是大图，优先考虑 IndexedDB 存 Blob；设置部分用 JSON 即可。
