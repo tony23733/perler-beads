@@ -36,6 +36,10 @@ function makeRecord(id: string, name: string, updatedAt: number): ProjectRecord 
     sourceName: 'photo.png',
     source: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/png' }),
     settings: { ...defaults, targetWidth: 29, targetHeight: 40, maxColors: 16 },
+    edits: [
+      [0, 'B2'],
+      [3, null],
+    ],
   }
 }
 
@@ -97,6 +101,10 @@ describe('projectStore (IndexedDB)', () => {
     const loaded = await loadProject(rec.id)
     expect(loaded?.settings.targetWidth).toBe(29)
     expect(loaded?.settings.maxColors).toBe(16)
+    expect(loaded?.edits).toEqual([
+      [0, 'B2'],
+      [3, null],
+    ])
     expect(loaded?.source).toBeInstanceOf(Blob)
     expect(loaded?.source.size).toBe(4)
 
@@ -137,6 +145,10 @@ describe('project file (导出/导入)', () => {
     expect(parsed.sourceName).toBe('photo.png')
     expect(parsed.settings.targetWidth).toBe(29)
     expect(parsed.settings.maxColors).toBe(16)
+    expect(parsed.edits).toEqual([
+      [0, 'B2'],
+      [3, null],
+    ])
     expect(parsed.source.type).toBe('image/png')
     const bytes = new Uint8Array(await parsed.source.arrayBuffer())
     expect([...bytes]).toEqual([1, 2, 3, 4])

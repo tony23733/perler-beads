@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import ColorStats from './components/ColorStats.vue'
+import EditToolbar from './components/EditToolbar.vue'
 import ExportPanel from './components/ExportPanel.vue'
 import GridPreview from './components/GridPreview.vue'
 import GridSettings from './components/GridSettings.vue'
@@ -20,6 +21,9 @@ import type { DitherMode, RGB } from './types'
 import { DEFAULT_PALETTE_ID, getPalette, PALETTES } from './data/palettes'
 import { newProjectId, normalizeSettings, parseProjectFile, PROJECT_VERSION, serializeProjectFile } from './core/project'
 import type { ProjectMeta, ProjectRecord, ProjectSettingsSnapshot } from './core/project'
+import { applyEdits, commitStroke, createHistory, deserializeEdits, redo, serializeEdits, undo } from './core/edit'
+import type { EditChange, EditStroke, HistoryState } from './core/edit'
+import { statsFromCells } from './core/matcher'
 import { deleteProject, listProjects, loadProject, saveProject } from './core/projectStore'
 import type { PixelateResponse } from './workers/pixelate.worker'
 
@@ -63,6 +67,23 @@ const projectError = ref<string | null>(null)
 
 const viewMode = ref<'pixel' | 'grid'>('pixel')
 const gridOptions = ref<GridRenderOptions>({ ...DEFAULT_GRID_OPTIONS })
+
+// ---- 手工编辑 ----
+const editMode = ref(false)
+const editTool = ref<'paint' | 'eyedropper'>('paint')
+const activeColor = ref<string | null>(null)
+const history = shallowRef<HistoryState>(createHistory())
+const strokeChanges = new Map<number, EditChange>()
+
+/** 叠加手工编辑后的最终网格 */
+const gridCells = computed(() =>
+  result.value ? applyEdits(result.value.cells, history.value.edits) : [],
+)
+/** 以最终网格重新统计（不再走颜色匹配） */
+const gridStats = computed(() => statsFromCells(gridCells.value))
+const canUndo = computed(() => history.value.past.length > 0)
+const canRedo = computed(() => history.value.future.length > 0)
+const editCount = computed(() => history.value.edits.size)
 
 const palette = computed(() => getPalette(paletteId.value))
 const hasSource = computed(() => sourceUrl.value !== null)
@@ -108,7 +129,13 @@ async function run() {
       ditherStrength: ditherStrength.value,
       palette: palette.value,
     })
+    const previous = result.value
     result.value = res
+    // 网格尺寸变化（换图/改尺寸）后，旧的格点编辑不再对应，清空历史
+    if (!previous || previous.width !== res.width || previous.height !== res.height) {
+      history.value = createHistory()
+      strokeChanges.clear()
+    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -272,6 +299,7 @@ async function onSaveProject(name: string) {
       sourceName: sourceName.value,
       source: file,
       settings: collectSettings(),
+      edits: serializeEdits(history.value.edits),
     }
     await saveProject(record)
     await refreshProjects()
@@ -314,6 +342,8 @@ async function loadRecordIntoApp(record: ProjectRecord) {
   await setSourceImage(imageData)
   sourceReady.value = true
   await run()
+  // run() 可能因尺寸变化清空历史，所以恢复编辑要放在其后
+  history.value = { edits: deserializeEdits(record.edits ?? []), past: [], future: [] }
 }
 
 async function onExportProjectFile() {
@@ -334,6 +364,7 @@ async function onExportProjectFile() {
       sourceName: sourceName.value,
       source: file,
       settings: collectSettings(),
+      edits: serializeEdits(history.value.edits),
     }
     const text = await serializeProjectFile(record)
     downloadBlob(new Blob([text], { type: 'application/json' }), `${base}.perler.json`)
@@ -360,6 +391,7 @@ async function onImportProjectFile(file: File) {
       sourceName: parsed.sourceName,
       source: parsed.source,
       settings: parsed.settings,
+      edits: parsed.edits,
     }
     await loadRecordIntoApp(record)
     // 顺便存入 IndexedDB，下次可直接从列表加载
@@ -388,7 +420,67 @@ async function onDeleteProject(id: string) {
   }
 }
 
-onMounted(refreshProjects)
+function onCellPaint(index: number) {
+  const res = result.value
+  if (!res || index < 0 || index >= res.cells.length) return
+  const before = history.value.edits.get(index)
+  const after: string | null = activeColor.value
+  // 无变化则跳过（before === undefined 表示之前用的是计算值）
+  if (before === after) return
+  if (before === undefined && after === res.cells[index]) return
+
+  const existing = strokeChanges.get(index)
+  if (existing) existing.after = after
+  else strokeChanges.set(index, { index, before, after })
+
+  const next = new Map(history.value.edits)
+  next.set(index, after)
+  history.value = { ...history.value, edits: next }
+}
+
+function onPaintEnd() {
+  if (strokeChanges.size === 0) return
+  const stroke: EditStroke = { changes: Array.from(strokeChanges.values()) }
+  strokeChanges.clear()
+  history.value = commitStroke(history.value, stroke)
+}
+
+function onCellPick(index: number) {
+  activeColor.value = gridCells.value[index] ?? null
+}
+
+function undoEdit() {
+  strokeChanges.clear()
+  history.value = undo(history.value)
+}
+
+function redoEdit() {
+  strokeChanges.clear()
+  history.value = redo(history.value)
+}
+
+function clearEdits() {
+  strokeChanges.clear()
+  history.value = createHistory()
+}
+
+function onKeydown(e: KeyboardEvent) {
+  const mod = e.ctrlKey || e.metaKey
+  if (!mod) return
+  const key = e.key.toLowerCase()
+  if (key === 'z' && !e.shiftKey) {
+    e.preventDefault()
+    undoEdit()
+  } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+    e.preventDefault()
+    redoEdit()
+  }
+}
+
+onMounted(() => {
+  void refreshProjects()
+  window.addEventListener('keydown', onKeydown)
+})
 
 watch(
   [targetWidth, targetHeight, paletteId, background, maxColors, dither, removeColor],
@@ -399,6 +491,7 @@ watch([tolerance, minCoverage, ditherStrength], onLiveChange)
 
 onUnmounted(() => {
   disposed = true
+  window.removeEventListener('keydown', onKeydown)
   clearTimeout(timer)
   if (sourceUrl.value) URL.revokeObjectURL(sourceUrl.value)
 })
@@ -641,6 +734,25 @@ onUnmounted(() => {
             </div>
 
             <template v-else-if="result">
+              <EditToolbar
+                v-if="viewMode === 'pixel'"
+                :edit-mode="editMode"
+                :tool="editTool"
+                :active-color="activeColor"
+                :palette="palette"
+                :can-undo="canUndo"
+                :can-redo="canRedo"
+                :edit-count="editCount"
+                :busy="busy"
+                class="mb-3"
+                @update:edit-mode="editMode = $event"
+                @update:tool="editTool = $event"
+                @update:active-color="activeColor = $event"
+                @undo="undoEdit"
+                @redo="redoEdit"
+                @clear="clearEdits"
+              />
+
               <GridSettings
                 v-if="viewMode === 'grid'"
                 v-model="gridOptions"
@@ -649,17 +761,22 @@ onUnmounted(() => {
 
               <PixelPreview
                 v-if="viewMode === 'pixel'"
-                :cells="result.cells"
+                :cells="gridCells"
                 :width="result.width"
                 :height="result.height"
                 :palette="palette"
                 :samples="result.samples"
                 :pick-mode="picking"
+                :edit-mode="editMode"
+                :tool="editTool"
                 @pick="onPick"
+                @cell-paint="onCellPaint"
+                @cell-pick="onCellPick"
+                @paint-end="onPaintEnd"
               />
               <GridPreview
                 v-else
-                :cells="result.cells"
+                :cells="gridCells"
                 :width="result.width"
                 :height="result.height"
                 :palette="palette"
@@ -668,15 +785,15 @@ onUnmounted(() => {
             </template>
           </div>
 
-          <ColorStats v-if="result" :stats="result.stats" :palette="palette" />
+          <ColorStats v-if="result" :stats="gridStats" :palette="palette" />
 
           <ExportPanel
             v-if="result"
-            :cells="result.cells"
+            :cells="gridCells"
             :width="result.width"
             :height="result.height"
             :palette="palette"
-            :stats="result.stats"
+            :stats="gridStats"
             :grid-options="gridOptions"
           />
 

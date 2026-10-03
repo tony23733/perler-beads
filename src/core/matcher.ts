@@ -95,3 +95,19 @@ export function matchPixels(pixels: (RGB | null)[], matcher: ColorMatcher): Matc
 
   return { cells, stats }
 }
+
+/**
+ * 从已确定的色号数组统计用量（按用量降序）。
+ * 用于手工编辑后的重新统计——不再走颜色匹配，直接数。
+ */
+export function statsFromCells(cells: (string | null)[]): MatchStats[] {
+  const counts = new Map<string, number>()
+  for (let i = 0; i < cells.length; i++) {
+    const id = cells[i]
+    if (!id) continue
+    counts.set(id, (counts.get(id) ?? 0) + 1)
+  }
+  return Array.from(counts, ([id, count]) => ({ id, count })).sort(
+    (a, b) => b.count - a.count || a.id.localeCompare(b.id),
+  )
+}

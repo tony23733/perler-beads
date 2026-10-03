@@ -6,6 +6,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import App from '../src/App.vue'
+import EditToolbar from '../src/components/EditToolbar.vue'
 import ImageUploader from '../src/components/ImageUploader.vue'
 import PixelPreview from '../src/components/PixelPreview.vue'
 
@@ -96,5 +97,40 @@ describe('App 背景模式切换', () => {
     // 切回保留背景：应还原，无空格
     await clickButton(wrapper, '保留背景')
     expect(nullCount()).toBe(0)
+  })
+
+  it('手工编辑（涂色/擦除）+ 撤销/重做', async () => {
+    const wrapper = mount(App)
+    await wrapper.findComponent(ImageUploader).vm.$emit('select', new File([], 'x.png'))
+    await flushPromises()
+    await nextTick()
+
+    const cellsOf = () => wrapper.findComponent(PixelPreview).props('cells') as (string | null)[]
+    const original0 = cellsOf()[0]
+    expect(original0).not.toBeNull()
+
+    // 开启手工编辑；默认画笔颜色为「擦除」
+    wrapper.findComponent(EditToolbar).vm.$emit('update:edit-mode', true)
+    await nextTick()
+
+    // 在像素预览上擦除第 0 格
+    const preview = wrapper.findComponent(PixelPreview)
+    preview.vm.$emit('cell-paint', 0)
+    await nextTick()
+    expect(cellsOf()[0]).toBeNull()
+
+    // 抬手结束描边（记入历史）
+    preview.vm.$emit('paint-end')
+    await nextTick()
+
+    // 撤销 → 恢复计算值
+    wrapper.findComponent(EditToolbar).vm.$emit('undo')
+    await nextTick()
+    expect(cellsOf()[0]).toBe(original0)
+
+    // 重做 → 又变回擦除
+    wrapper.findComponent(EditToolbar).vm.$emit('redo')
+    await nextTick()
+    expect(cellsOf()[0]).toBeNull()
   })
 })

@@ -2,7 +2,7 @@
 
 > 状态：**第二阶段进行中** —— 第一阶段 MVP 已验收。
 > 已完成：限制颜色数量、抖动（Floyd–Steinberg / Bayer 有序）、网格行列坐标、背景处理（保留 / 透明 / 按颜色去除）、分页 A4 PDF 导出、工程保存/加载（IndexedDB）。
-> 下一步建议：**手工编辑像素 + 撤销/重做** → PWA。
+> 下一步建议：**接入 PWA**（manifest + Service Worker，手机添加到主屏幕、离线可用）。
 > 目标：把一张照片转换成 MARD 色号的拼豆像素图，并绘制可打印的网格图纸。
 > 定位：**第一阶段纯本地使用**（浏览器打开即用，无服务器、无 PWA）。功能成熟后再考虑部署与打包。
 
@@ -87,16 +87,13 @@ npm run preview    # 本地预览打包结果
   - 「透明背景」：仅对自带 alpha 通道的图片（抠好的 PNG）有意义（按平均 alpha 低于阈值判空）；对不透明照片与「保留背景」完全相同，界面会在无 alpha 时禁用并提示。
   - 「按颜色去除」：在像素预览里点选背景色、自动取四角、容差调节，外加**边缘阈值**（前景占比低于该值的格子视为背景，清掉零星残留）；在**源像素级**剔除背景后再做区域平均，避免边缘混色；去掉的格子不放豆子、也不参与限色与统计。
 
-**待做（建议顺序）**
-- ✅ **分页 A4 PDF 导出**：把整张网格按每格 N mm 切页（4/5/6/8mm），自动或手动选择纵向/横向（默认选页数最少的方向）；每页带标题、全局行列范围、页码、四角拼接定位角标与页脚；可选附带用色清单页。分片渲染复用 `renderGrid` 的**视口（viewport）**能力，行列坐标按全局编号。PDF 文案用 ASCII（jsPDF 内置字体不含中文）。
-
-**待做（建议顺序）**
+- ✅ **分页 A4 PDF 导出**：把整张网格按每格 N mm 切页（滑块 2–16mm），自动或手动选择纵向/横向（默认选页数最少的方向）；每页带标题、全局行列范围、页码、四角拼接定位角标与页脚；可选附带用色清单页。分片渲染复用 `renderGrid` 的**视口（viewport）**能力，行列坐标按全局编号。PDF 文案用 ASCII（jsPDF 内置字体不含中文）。
 - ✅ **工程保存 / 加载**：把全部设置 + 源图保存到 IndexedDB（源图以 Blob 存，无需 base64）。可命名保存（同名覆盖）、列表加载、删除；另有**导出/导入工程文件**（`.perler.json`，源图 base64 内嵌），可存到任意文件夹。设置带 `PROJECT_VERSION` 与 `normalizeSettings()` 容错，向后兼容。纯本地，无后端。
   - 注：IndexedDB 是**浏览器内部数据库**（在浏览器配置目录里，不是用户可浏览的普通文件），网页无法打开系统文件管理器；需要“文件”就用导出/导入。
+- ✅ **手工编辑像素 + 撤销/重做**：编辑模式支持**涂色 / 吸管 / 擦除**，在像素预览上点击/拖动修改；手工编辑作为**覆盖层**叠在算法结果上，预览/统计/导出统一用叠加后的网格。撤销/重做按「描边」为单位（命令栈），支持 Ctrl+Z / Ctrl+Shift+Z，编辑会随工程保存/加载。
 
 **待做（建议顺序）**
-1. **手工编辑像素（点/拖改色、吸管）+ 撤销/重做**：撤销/重做需要先有手工编辑才有意义，建议一起做。← **下一步从这里开始**
-2. **接入 PWA**（manifest + Service Worker），手机「添加到主屏幕」、离线可用；此时需要 HTTPS 静态托管。
+1. **接入 PWA**（manifest + Service Worker），手机「添加到主屏幕」、离线可用；此时需要 HTTPS 静态托管。← **下一步从这里开始**
 
 **暂缓（以后再说）**
 - ⏸️ **批量处理多张图**：用户决定暂时不做。
@@ -219,11 +216,13 @@ perler_beads/
 │  │  ├─ ImageUploader.vue      # 上传/拖拽
 │  │  ├─ SizeSettings.vue       # 网格尺寸 + 锁比例 + 预设
 │  │  ├─ PaletteSelect.vue      # 色卡选择
-│  │  ├─ PixelPreview.vue       # 像素预览
+│  │  ├─ PixelPreview.vue       # 像素预览（背景拾色 + 手工编辑涂色/吸管）
+│  │  ├─ EditToolbar.vue        # 手工编辑：颜色选择 / 工具 / 撤销重做
+│  │  ├─ ProjectPanel.vue       # 工程保存/加载 + 导入导出文件
 │  │  ├─ GridPreview.vue        # 网格图纸预览
 │  │  ├─ GridSettings.vue       # 网格显示设置
 │  │  ├─ ColorStats.vue         # 用色清单
-│  │  └─ ExportPanel.vue        # PNG/CSV 导出
+│  │  └─ ExportPanel.vue        # PNG/CSV/PDF 导出
 │  ├─ core/                     # 纯逻辑，可在 Node 下单测
 │  │  ├─ color.ts               # sRGB↔Lab、CIEDE2000
 │  │  ├─ pixelate.ts            # 降采样取样（保留 / 透明 / 按色去除）
@@ -235,6 +234,7 @@ perler_beads/
 │  │  ├─ pdf.ts                 # A4 分页规划 + jsPDF 导出（分片用 grid 视口）
 │  │  ├─ project.ts             # 工程设置快照与版本化 normalize（纯逻辑）
 │  │  ├─ projectStore.ts        # IndexedDB 工程存取（源图存 Blob）
+│  │  ├─ edit.ts                # 手工编辑覆盖层 + 命令栈撤销/重做
 │  │  ├─ image.ts               # 文件 → ImageData
 │  │  └─ pixelateClient.ts      # Worker 客户端（共享 worker + id 对应并发）
 │  ├─ workers/
@@ -243,7 +243,7 @@ perler_beads/
 │     ├─ mard221.ts             # 生成：221 色
 │     ├─ mard291.ts             # 生成：291 色
 │     └─ index.ts               # 运行时封装（预计算 Lab、默认色卡）
-└─ tests/                       # 14 个文件 / 111 项（vitest）
+└─ tests/                       # 15 个文件 / 123 项（vitest）
 ```
 
 ---
@@ -295,7 +295,8 @@ interface ProjectSettings {
    - ~~背景处理~~ ✅（保留 / 透明 / 按颜色去除；源像素级去背景 + 预览拾色 + 自动取四角 + 容差 + 边缘阈值）
    - ~~分页 A4 PDF~~ ✅（`core/pdf.ts` + `ExportPanel`；每格 mm 连续可调，自动纵向/横向，页码 + 全局行列范围 + 四角拼接角标，可选清单页；jsPDF 动态 import 代码分包）
    - ~~保存/加载工程~~ ✅（`core/project.ts` + `core/projectStore.ts` + `ProjectPanel`；IndexedDB 存源图 Blob，设置版本化 + 容错，同名覆盖；支持导出/导入 `.perler.json` 工程文件）
-   - **撤销/重做** ← 下一步
+   - ~~手工编辑像素 + 撤销/重做~~ ✅（`core/edit.ts` + `EditToolbar` + PixelPreview 指针事件；涂色/吸管/擦除，描边为撤销单位，Ctrl+Z/Ctrl+Shift+Z，编辑随工程保存）
+   - **接入 PWA** ← 下一步
    - 批量处理 —— ⏸️ **暂缓（以后再说）**
 10. （第二阶段）接入 PWA + 静态托管；需要 HTTPS 时才部署。
 11. （第三阶段，可选）Tauri 打包桌面版。
@@ -321,7 +322,7 @@ interface ProjectSettings {
 npm install              # 首次
 npm run dev              # 开发，http://localhost:5173
 npm run dev -- --host    # 手机同局域网访问
-npm test                 # 111 项单元测试
+npm test                 # 123 项单元测试
 npm run typecheck        # vue-tsc 类型检查
 npm run build            # 生产构建（含类型检查）
 npm run gen:palette      # 由 reference/ 重新生成色卡（一般不用跑）
@@ -342,10 +343,11 @@ npm run gen:palette      # 由 reference/ 重新生成色卡（一般不用跑�
 - **PDF 中文问题**：jsPDF 内置 Helvetica 不含中文字形，PDF 内的标题/页码/表头一律用 ASCII（如 `Page 1/4`、`Cols 1-30`），不要写中文，否则乱码或报错。
 - **PDF 分页的标尺**：`planPdfTiles` 里预留了 `ruler = cellSize * 0.9`；分片渲染用 `renderGrid(..., viewport)`，行列号按全局编号。新增分页参数时记得同步两处的空间估算。
 - **工程存储**：源图以 `Blob` 存 IndexedDB（不要转 base64）；设置用 `normalizeSettings(raw, defaults)` 补齐/夹紧并带 `PROJECT_VERSION`，以后加字段时保持向后兼容。`projectStore` 的 `dbPromise` 有缓存，测试用 `_resetDbForTests()` + `fake-indexeddb/auto`。跨机器/归档用 **导出/导入 `.perler.json`**（源图 base64 内嵌）。网页无法打开系统文件管理器，不要再尝试“打开工程目录”。
+- **手工编辑是覆盖层**：`core/edit.ts` 的 `applyEdits(cells, edits)` 把「索引→色号|null」叠在算法结果上；**预览/统计/导出都必须用叠加后的 `gridCells`/`gridStats`**，不要再用 `result.cells`/`result.stats`。统计用 `statsFromCells`（直接数，不再匹配）。撤销/重做以「描边」为单位（`commitStroke`/`undo`/`redo`），网格尺寸变化或换图时清空历史。
 - 色卡是**屏幕参考值**，界面/文档需保留「以实物色卡为准」提示。
 - `reference/` 为只读外部数据，不要改；改色卡请改 `scripts/gen-palette.mjs` 后重生成。
 - 本地截图 `Snipaste_*.png` 已被 `.gitignore` 忽略；不要 `git add -f` 强加。
 
 ### 10.3 下一步
 
-从 **撤销/重做** 开始（见 3.2）。注意：目前结果只是「参数 → 网格」的派生值，没有手工编辑，撤销/重做的意义要等**手工编辑像素**做完后才体现。建议先做**像素编辑**（点/拖改色、吸管），再用命令栈实现撤销/重做。
+从 **接入 PWA** 开始（见 3.2）：加 manifest + Service Worker（可用 `vite-plugin-pwa`），实现「添加到主屏幕」与离线；注意 Service Worker 需要 HTTPS 或 localhost。

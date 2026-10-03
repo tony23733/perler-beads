@@ -4,6 +4,7 @@
 import { DEFAULT_GRID_OPTIONS } from './grid'
 import type { GridRenderOptions } from './grid'
 import type { BackgroundMode } from './pixelate'
+import type { EditEntry } from './edit'
 import type { DitherMode, RGB } from '../types'
 
 /** 工程文件/记录版本，便于以后迁移 */
@@ -36,6 +37,8 @@ export interface ProjectRecord {
   /** 原始图片文件（存 IndexedDB 用 Blob，无需 base64） */
   source: Blob
   settings: ProjectSettingsSnapshot
+  /** 手工编辑的格点（叠加在计算结果上），可选（旧工程没有） */
+  edits?: EditEntry[]
 }
 
 /** 列表用的轻量元信息（不含大字段） */
@@ -113,6 +116,8 @@ export interface ProjectFile {
   /** 源图 base64（不含 data: 前缀） */
   sourceBase64: string
   settings: ProjectSettingsSnapshot
+  /** 手工编辑的格点 */
+  edits?: EditEntry[]
 }
 
 export const PROJECT_FILE_TYPE = 'perler-beads-project'
@@ -146,6 +151,7 @@ export async function serializeProjectFile(record: ProjectRecord): Promise<strin
     sourceMime: record.source.type || 'application/octet-stream',
     sourceBase64: await blobToBase64(record.source),
     settings: record.settings,
+    edits: record.edits ?? [],
   }
   return JSON.stringify(file)
 }
@@ -156,6 +162,7 @@ export interface ParsedProjectFile {
   sourceName: string
   source: Blob
   settings: ProjectSettingsSnapshot
+  edits: EditEntry[]
 }
 
 /** 解析并校验工程文件文本；非法格式抛错 */
@@ -179,5 +186,6 @@ export function parseProjectFile(
     sourceName: typeof obj.sourceName === 'string' && obj.sourceName ? obj.sourceName : 'source.png',
     source: base64ToBlob(obj.sourceBase64, typeof obj.sourceMime === 'string' ? obj.sourceMime : 'image/png'),
     settings: normalizeSettings(obj.settings, defaults),
+    edits: Array.isArray(obj.edits) ? (obj.edits as EditEntry[]) : [],
   }
 }
